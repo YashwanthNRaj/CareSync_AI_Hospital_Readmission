@@ -1,0 +1,12 @@
+{
+  "threshold": 0.35,
+  "explanation": "In this clinical context, we lower the threshold to catch more at-risk patients, reducing false negatives.",
+  "selection_details": {
+    "threshold": 0.35,
+    "recall": 0.9229414354909732,
+    "precision": 0.12606760495609287,
+    "f1": 0.22183415356934963,
+    "false_negatives": 175.0,
+    "false_positives": 14530.0
+  }
+}
