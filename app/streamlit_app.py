@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import csv
 import json
 import sys
 import time
+from datetime import date, datetime
 from html import escape
 from pathlib import Path
 from textwrap import dedent
@@ -19,6 +21,10 @@ from src.config import FIGURES_DIR, METRICS_PATH
 from src.predict import CLINICAL_DISCLAIMER, predict_readmission
 
 SAMPLE_PATH = PROJECT_ROOT / "data" / "sample" / "sample_patient.json"
+MODEL_PATH = PROJECT_ROOT / "models" / "careguard_readmission_model.joblib"
+THRESHOLD_PATH = PROJECT_ROOT / "models" / "threshold.json"
+MLRUNS_DIR = PROJECT_ROOT / "mlruns"
+PREDICTION_LOG_PATH = PROJECT_ROOT / "reports" / "prediction_logs.csv"
 
 
 def render_html(markup: str) -> None:
@@ -49,6 +55,32 @@ def load_metrics() -> dict:
     return {}
 
 
+def load_threshold() -> dict:
+    if THRESHOLD_PATH.exists():
+        return json.loads(THRESHOLD_PATH.read_text(encoding="utf-8"))
+    return {}
+
+
+def file_modified_date(path: Path) -> str:
+    if not path.exists():
+        return "Not available"
+    return time.strftime("%d %b %Y, %I:%M %p", time.localtime(path.stat().st_mtime))
+
+
+def get_metric_value(metrics: dict, keys: list[str], default: str = "Not available") -> str:
+    for key in keys:
+        if key in metrics:
+            value = metrics[key]
+            if isinstance(value, float):
+                return f"{value:.3f}"
+            return str(value)
+    return default
+
+
+def get_model_version(metrics: dict) -> str:
+    return str(metrics.get("model_version") or "v1.0.0")
+
+
 def get_dashboard_risk_level(probability_percent: float) -> Tuple[str, str]:
     if probability_percent <= 30:
         return "Low Risk", "#22c55e"
@@ -59,6 +91,112 @@ def get_dashboard_risk_level(probability_percent: float) -> Tuple[str, str]:
 
 def risk_emoji() -> str:
     return "●"
+
+
+def log_prediction_event(
+    patient_payload: dict,
+    patient_id: str,
+    patient_name: str,
+    risk_score_percent: float,
+    risk_level: str,
+    prediction: str,
+    model_version: str,
+) -> None:
+    PREDICTION_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    now = datetime.now()
+    input_summary = (
+        f"age={patient_payload.get('age')}, "
+        f"gender={patient_payload.get('gender')}, "
+        f"time_in_hospital={patient_payload.get('time_in_hospital')}, "
+        f"inpatient_visits={patient_payload.get('number_inpatient')}, "
+        f"emergency_visits={patient_payload.get('number_emergency')}, "
+        f"A1C={patient_payload.get('A1Cresult')}, "
+        f"insulin={patient_payload.get('insulin')}"
+    )
+
+    row = {
+        "timestamp": now.isoformat(timespec="seconds"),
+        "date": now.date().isoformat(),
+        "patient_id": patient_id,
+        "patient_name": patient_name,
+        "input_summary": input_summary,
+        "risk_score": f"{risk_score_percent:.2f}",
+        "risk_level": risk_level,
+        "prediction": prediction,
+        "model_version": model_version,
+    }
+
+    fieldnames = [
+        "timestamp",
+        "date",
+        "patient_id",
+        "patient_name",
+        "input_summary",
+        "risk_score",
+        "risk_level",
+        "prediction",
+        "model_version",
+    ]
+
+    file_exists = PREDICTION_LOG_PATH.exists()
+
+    with PREDICTION_LOG_PATH.open("a", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(row)
+
+
+def load_prediction_logs() -> list[dict]:
+    if not PREDICTION_LOG_PATH.exists():
+        return []
+
+    try:
+        with PREDICTION_LOG_PATH.open("r", newline="", encoding="utf-8") as file:
+            return list(csv.DictReader(file))
+    except Exception:
+        return []
+
+
+def get_monitoring_summary() -> dict:
+    logs = load_prediction_logs()
+    today_str = date.today().isoformat()
+    today_logs = [row for row in logs if row.get("date") == today_str]
+
+    risk_scores: list[float] = []
+    for row in today_logs:
+        try:
+            risk_scores.append(float(row.get("risk_score", 0)))
+        except ValueError:
+            pass
+
+    total_today = len(today_logs)
+    high_risk_count = sum(1 for row in today_logs if row.get("risk_level") == "High Risk")
+    average_risk = sum(risk_scores) / len(risk_scores) if risk_scores else 0.0
+    high_risk_rate = high_risk_count / total_today if total_today else 0.0
+
+    if total_today == 0:
+        drift_warning = "No traffic yet"
+        drift_color = "#9CA3AF"
+    elif average_risk >= 65 or (total_today >= 3 and high_risk_rate >= 0.5):
+        drift_warning = "High-risk pattern detected"
+        drift_color = "#fb5a1e"
+    elif average_risk >= 50:
+        drift_warning = "Elevated risk watch"
+        drift_color = "#f59e0b"
+    else:
+        drift_warning = "Normal"
+        drift_color = "#22c55e"
+
+    return {
+        "total_today": total_today,
+        "high_risk_count": high_risk_count,
+        "average_risk": average_risk,
+        "drift_warning": drift_warning,
+        "drift_color": drift_color,
+        "total_logs": len(logs),
+    }
 
 
 def risk_dashboard_card(
@@ -165,9 +303,6 @@ def inject_css() -> None:
             --muted:#9CA3AF;
             --border:rgba(255,255,255,0.10);
             --orange-border:rgba(252,128,25,0.25);
-            --green:#22c55e;
-            --amber:#f59e0b;
-            --orange:#fb5a1e;
         }
 
         html, body, [class*="css"] {
@@ -350,18 +485,6 @@ def inject_css() -> None:
             color: #D1D5DB !important;
         }
 
-        [data-testid="stAlert"] {
-            background: rgba(24,24,24,0.82) !important;
-            border: 1px solid rgba(252,128,25,0.18) !important;
-            border-radius: 18px !important;
-            color: var(--text) !important;
-            box-shadow: 0 12px 34px rgba(0,0,0,0.26);
-        }
-
-        [data-testid="stAlert"] * {
-            color: var(--text) !important;
-        }
-
         .hero {
             position: relative;
             padding: 2.35rem;
@@ -378,27 +501,6 @@ def inject_css() -> None:
             overflow: hidden;
             margin-bottom: 1.2rem;
             animation: softLift 700ms ease-out both;
-        }
-
-        .hero::before {
-            content: "";
-            position: absolute;
-            inset: -2px;
-            background: linear-gradient(90deg, rgba(252,128,25,0.22), rgba(255,159,69,0.14), rgba(255,255,255,0.05));
-            opacity: 0.55;
-            filter: blur(32px);
-            z-index: 0;
-            animation: premiumGlow 5s ease-in-out infinite;
-        }
-
-        .hero::after {
-            content: "";
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(105deg, transparent 0%, transparent 42%, rgba(255,255,255,0.055) 50%, transparent 58%, transparent 100%);
-            transform: translateX(-120%);
-            animation: glassSweep 7s ease-in-out infinite;
-            pointer-events: none;
         }
 
         .hero-content {
@@ -459,12 +561,7 @@ def inject_css() -> None:
             text-align: center;
             box-shadow: 0 18px 45px rgba(0,0,0,0.34);
             transition: transform 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
-            animation: chipFloat 4.6s ease-in-out infinite;
         }
-
-        .hero-chip:nth-child(2) { animation-delay: 0.3s; }
-        .hero-chip:nth-child(3) { animation-delay: 0.6s; }
-        .hero-chip:nth-child(4) { animation-delay: 0.9s; }
 
         .hero-chip:hover {
             transform: translateY(-4px);
@@ -481,16 +578,6 @@ def inject_css() -> None:
             border: 1px solid var(--orange-border);
             box-shadow: 0 26px 78px rgba(0,0,0,0.46);
             animation: softLift 600ms ease-out both;
-        }
-
-        div[data-testid="stForm"]::before {
-            content: "";
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(105deg, transparent 0%, transparent 44%, rgba(255,159,69,0.065) 50%, transparent 56%, transparent 100%);
-            transform: translateX(-120%);
-            animation: formSweep 9s ease-in-out infinite;
-            pointer-events: none;
         }
 
         .section-title {
@@ -513,7 +600,6 @@ def inject_css() -> None:
             border-radius: 999px;
             background: linear-gradient(90deg, var(--accent-bright), var(--accent), transparent);
             box-shadow: 0 0 20px rgba(252,128,25,0.42);
-            animation: underlinePulse 3.2s ease-in-out infinite;
         }
 
         .tiny-text {
@@ -552,20 +638,6 @@ def inject_css() -> None:
             animation: softLift 700ms ease-out both;
         }
 
-        .hospital-risk-output::before {
-            content: "";
-            position: absolute;
-            inset: -40%;
-            background: conic-gradient(from 180deg, transparent, rgba(255,159,69,0.12), transparent, rgba(252,128,25,0.08), transparent);
-            animation: cardAuraRotate 8s linear infinite;
-            pointer-events: none;
-        }
-
-        .hospital-risk-output > * {
-            position: relative;
-            z-index: 1;
-        }
-
         .risk-hero-row {
             display: flex;
             justify-content: space-between;
@@ -573,24 +645,16 @@ def inject_css() -> None:
             gap: 1rem;
         }
 
-        .risk-hero-left {
-            display: flex;
-            flex-direction: column;
-            gap: 0.35rem;
-        }
-
         .risk-main-label {
             color: #FFFFFF;
             font-size: 1rem;
             font-weight: 850;
-            letter-spacing: 0.01em;
         }
 
         .risk-main-sub {
             color: #D1D5DB;
             font-size: 0.82rem;
             font-weight: 700;
-            opacity: 0.94;
         }
 
         .risk-percent-display {
@@ -605,7 +669,6 @@ def inject_css() -> None:
             font-size: clamp(3.4rem, 6.5vw, 5.4rem);
             font-weight: 950;
             letter-spacing: -0.06em;
-            text-shadow: 0 0 26px rgba(252,128,25,0.20);
             min-width: 2.4ch;
             text-align: right;
         }
@@ -615,8 +678,6 @@ def inject_css() -> None:
             font-weight: 950;
             line-height: 1;
             margin-top: 0.35rem;
-            opacity: 0.98;
-            text-shadow: 0 0 18px rgba(252,128,25,0.22);
         }
 
         .risk-divider {
@@ -633,10 +694,6 @@ def inject_css() -> None:
             gap: 1rem;
             padding: 0.85rem 0;
             border-bottom: 1px solid rgba(255,255,255,0.08);
-        }
-
-        .risk-dashboard-row:last-child {
-            border-bottom: none;
         }
 
         .risk-dashboard-label {
@@ -661,34 +718,12 @@ def inject_css() -> None:
             color: #050505;
             font-weight: 950;
             font-size: 1rem;
-            box-shadow: 0 0 30px rgba(255,255,255,0.08);
             min-width: 180px;
         }
 
-        .clinical-note {
-            margin-top: 1.1rem;
-            padding: 1rem 1.05rem;
-            border-radius: 22px;
-            background: linear-gradient(135deg, rgba(252,128,25,0.10), rgba(24,24,24,0.70));
-            border: 1px solid rgba(252,128,25,0.24);
-            color: #fff7ed;
-            font-size: 0.96rem;
-            line-height: 1.7;
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
-        }
-
-        .recommendation {
-            padding: 1.1rem;
-            border-radius: 24px;
-            background: rgba(34,197,94,0.10);
-            border: 1px solid rgba(34,197,94,0.22);
-            color: #dcfce7;
-            line-height: 1.65;
-            margin-top: 1rem;
-            animation: softLift 700ms ease-out both;
-        }
-
-        .explanation {
+        .clinical-note,
+        .explanation,
+        .warning-box {
             padding: 1.1rem;
             border-radius: 24px;
             background: rgba(24,24,24,0.86);
@@ -702,15 +737,14 @@ def inject_css() -> None:
             animation: softLift 700ms ease-out both;
         }
 
-        .warning-box {
-            padding: 1rem;
+        .recommendation {
+            padding: 1.1rem;
             border-radius: 24px;
-            background: rgba(252,128,25,0.10);
-            border: 1px solid rgba(252,128,25,0.25);
-            color: #FFFFFF;
-            line-height: 1.6;
-            animation: softLift 700ms ease-out both;
-            box-shadow: 0 16px 44px rgba(0,0,0,0.32);
+            background: rgba(34,197,94,0.10);
+            border: 1px solid rgba(34,197,94,0.22);
+            color: #dcfce7;
+            line-height: 1.65;
+            margin-top: 1rem;
         }
 
         .patient-card {
@@ -757,13 +791,23 @@ def inject_css() -> None:
             margin-top: 0.25rem;
         }
 
+        .monitoring-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.48rem 0.85rem;
+            border-radius: 999px;
+            color: #050505;
+            font-weight: 950;
+            font-size: 0.82rem;
+        }
+
         div[data-testid="stMetric"] {
             padding: 1rem;
             border-radius: 24px;
             background: rgba(24,24,24,0.86);
             border: 1px solid var(--border);
             box-shadow: 0 18px 50px rgba(0,0,0,0.34);
-            animation: softLift 700ms ease-out both;
         }
 
         div[data-testid="stMetricValue"] {
@@ -790,13 +834,12 @@ def inject_css() -> None:
             font-size: 1.05rem;
             box-shadow: 0 18px 55px rgba(252,128,25,0.24), 0 0 0 1px rgba(255,255,255,0.12) inset;
             transition: all 0.25s ease-in-out;
-            animation: buttonGradientFlow 4.8s ease-in-out infinite;
         }
 
         .stButton > button:hover,
         .stFormSubmitButton > button:hover {
             transform: translateY(-3px) scale(1.018);
-            box-shadow: 0 30px 84px rgba(252,128,25,0.36), 0 0 50px rgba(255,159,69,0.22), 0 0 0 1px rgba(255,255,255,0.22) inset;
+            box-shadow: 0 30px 84px rgba(252,128,25,0.36);
             filter: brightness(1.08);
         }
 
@@ -811,25 +854,19 @@ def inject_css() -> None:
             border: 1px solid var(--border);
             color: var(--text-secondary);
             font-weight: 850;
-            transition: all 220ms ease;
-        }
-
-        .stTabs [data-baseweb="tab"]:hover {
-            border-color: rgba(252,128,25,0.34);
-            transform: translateY(-1px);
         }
 
         .stTabs [aria-selected="true"] {
             background: rgba(252,128,25,0.16);
             color: var(--text);
             border: 1px solid rgba(252,128,25,0.40);
-            box-shadow: 0 0 28px rgba(252,128,25,0.14);
         }
 
         label,
         .stSelectbox label,
         .stNumberInput label,
-        .stTextInput label {
+        .stTextInput label,
+        .stRadio label {
             color: var(--text) !important;
             font-weight: 850 !important;
         }
@@ -852,25 +889,6 @@ def inject_css() -> None:
             border: 1px solid rgba(255,255,255,0.12) !important;
             border-radius: 17px !important;
             color: #FFFFFF !important;
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 12px 32px rgba(0,0,0,0.34) !important;
-            transition: border-color 220ms ease, box-shadow 220ms ease, transform 220ms ease;
-        }
-
-        [data-testid="stTextInput"] div[data-baseweb="input"] > div,
-        [data-testid="stNumberInput"] div[data-baseweb="input"] > div {
-            background-color: transparent !important;
-        }
-
-        input::placeholder {
-            color: rgba(209,213,219,0.58) !important;
-            -webkit-text-fill-color: rgba(209,213,219,0.58) !important;
-        }
-
-        [data-testid="stTextInput"] div[data-baseweb="input"]:focus-within,
-        [data-testid="stNumberInput"] div[data-baseweb="input"]:focus-within {
-            transform: translateY(-1px);
-            border-color: rgba(255,159,69,0.58) !important;
-            box-shadow: 0 0 0 1px rgba(252,128,25,0.22), 0 0 34px rgba(252,128,25,0.16) !important;
         }
 
         [data-testid="stSelectbox"] div[data-baseweb="select"] > div {
@@ -878,14 +896,6 @@ def inject_css() -> None:
             border: 1px solid rgba(255,255,255,0.12) !important;
             border-radius: 17px !important;
             color: #FFFFFF !important;
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 12px 32px rgba(0,0,0,0.34) !important;
-            transition: border-color 220ms ease, box-shadow 220ms ease, transform 220ms ease;
-        }
-
-        [data-testid="stSelectbox"] div[data-baseweb="select"] > div:hover {
-            transform: translateY(-1px);
-            border-color: rgba(255,159,69,0.46) !important;
-            box-shadow: 0 0 0 1px rgba(252,128,25,0.15), 0 0 30px rgba(252,128,25,0.12) !important;
         }
 
         [data-testid="stSelectbox"] div[data-baseweb="select"] span {
@@ -907,7 +917,6 @@ def inject_css() -> None:
             color: #FFFFFF !important;
             border-radius: 18px !important;
             border: 1px solid rgba(252,128,25,0.30) !important;
-            box-shadow: 0 20px 70px rgba(0,0,0,0.65), 0 0 28px rgba(252,128,25,0.12) !important;
         }
 
         div[data-baseweb="popover"] *,
@@ -934,39 +943,22 @@ def inject_css() -> None:
         div[role="option"][aria-selected="true"],
         li[role="option"][aria-selected="true"] {
             background: rgba(252,128,25,0.22) !important;
-            color: #FFFFFF !important;
-            -webkit-text-fill-color: #FFFFFF !important;
-        }
-
-        input, textarea {
-            color: var(--text) !important;
         }
 
         div[data-testid="stExpander"] {
             background: rgba(24,24,24,0.82) !important;
             border: 1px solid rgba(252,128,25,0.28) !important;
             border-radius: 22px !important;
-            box-shadow: 0 16px 48px rgba(0,0,0,0.35), 0 0 30px rgba(252,128,25,0.08);
+            box-shadow: 0 16px 48px rgba(0,0,0,0.35);
             overflow: hidden;
         }
 
-        div[data-testid="stExpander"] details {
-            background: rgba(24,24,24,0.82) !important;
-            border-radius: 22px !important;
-        }
-
         div[data-testid="stExpander"] summary {
-            background:
-                linear-gradient(135deg, rgba(24,24,24,0.96), rgba(5,5,5,0.92)) !important;
+            background: linear-gradient(135deg, rgba(24,24,24,0.96), rgba(5,5,5,0.92)) !important;
             color: #FFFFFF !important;
             border-bottom: 1px solid rgba(252,128,25,0.20) !important;
             padding: 0.9rem 1rem !important;
             font-weight: 850 !important;
-        }
-
-        div[data-testid="stExpander"] summary:hover {
-            background:
-                linear-gradient(135deg, rgba(252,128,25,0.16), rgba(24,24,24,0.94)) !important;
         }
 
         div[data-testid="stExpander"] summary *,
@@ -974,12 +966,6 @@ def inject_css() -> None:
             color: #FFFFFF !important;
             fill: #FFFFFF !important;
             -webkit-text-fill-color: #FFFFFF !important;
-            opacity: 1 !important;
-        }
-
-        div[data-testid="stExpander"] div[role="button"] {
-            background: transparent !important;
-            color: #FFFFFF !important;
         }
 
         div[data-testid="stExpander"] * {
@@ -990,20 +976,11 @@ def inject_css() -> None:
         div[data-testid="stJson"],
         div[data-testid="stJson"] > div,
         div[data-testid="stJson"] pre,
-        div[data-testid="stJson"] code,
-        div[data-testid="stJson"] section,
-        div[data-testid="stJson"] article {
+        div[data-testid="stJson"] code {
             background: #050505 !important;
             color: #FFFFFF !important;
             -webkit-text-fill-color: #FFFFFF !important;
             border-radius: 18px !important;
-            border-color: rgba(252,128,25,0.22) !important;
-        }
-
-        div[data-testid="stJson"] {
-            border: 1px solid rgba(252,128,25,0.24) !important;
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 16px 42px rgba(0,0,0,0.35) !important;
-            overflow: hidden !important;
         }
 
         div[data-testid="stJson"] *,
@@ -1011,7 +988,6 @@ def inject_css() -> None:
             background: transparent !important;
             color: #FFFFFF !important;
             -webkit-text-fill-color: #FFFFFF !important;
-            opacity: 1 !important;
         }
 
         pre, code {
@@ -1022,13 +998,99 @@ def inject_css() -> None:
             border-radius: 16px !important;
         }
 
+        .mlops-flow {
+            display: flex;
+            align-items: stretch;
+            gap: 0.65rem;
+            overflow-x: auto;
+            padding: 1rem;
+            border-radius: 28px;
+            background:
+                linear-gradient(135deg, rgba(24,24,24,0.92), rgba(5,5,5,0.84)),
+                radial-gradient(circle at top right, rgba(252,128,25,0.12), transparent 44%);
+            border: 1px solid rgba(252,128,25,0.24);
+            box-shadow: 0 26px 76px rgba(0,0,0,0.42);
+        }
+
+        .mlops-step {
+            min-width: 185px;
+            padding: 1rem;
+            border-radius: 22px;
+            background: rgba(5,5,5,0.72);
+            border: 1px solid rgba(255,255,255,0.10);
+        }
+
+        .mlops-step-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 14px;
+            display: grid;
+            place-items: center;
+            margin-bottom: 0.8rem;
+            color: #050505;
+            background: linear-gradient(135deg, #FF9F45, #FC8019);
+            font-weight: 950;
+        }
+
+        .mlops-step-title {
+            color: #FFFFFF;
+            font-weight: 950;
+            font-size: 0.98rem;
+            line-height: 1.25;
+            margin-bottom: 0.35rem;
+        }
+
+        .mlops-step-sub {
+            color: #D1D5DB;
+            font-weight: 650;
+            font-size: 0.78rem;
+            line-height: 1.45;
+        }
+
+        .mlops-arrow {
+            display: flex;
+            align-items: center;
+            color: #FF9F45;
+            font-size: 1.65rem;
+            font-weight: 950;
+        }
+
+        .mlops-meta-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.9rem;
+        }
+
+        .mlops-meta-card {
+            padding: 1.1rem;
+            border-radius: 24px;
+            background: linear-gradient(135deg, rgba(24,24,24,0.92), rgba(5,5,5,0.84));
+            border: 1px solid rgba(252,128,25,0.22);
+            box-shadow: 0 18px 50px rgba(0,0,0,0.34);
+        }
+
+        .mlops-meta-label {
+            color: #9CA3AF;
+            font-size: 0.78rem;
+            font-weight: 850;
+            text-transform: uppercase;
+            letter-spacing: 0.045em;
+            margin-bottom: 0.45rem;
+        }
+
+        .mlops-meta-value {
+            color: #FFFFFF;
+            font-size: 1.05rem;
+            font-weight: 950;
+            line-height: 1.35;
+        }
+
         .footer {
             text-align: center;
             color: var(--muted);
             margin-top: 1.5rem;
             font-size: 0.9rem;
             font-weight: 650;
-            animation: softLift 900ms ease-out both;
         }
 
         @keyframes sidebarSweep {
@@ -1056,45 +1118,9 @@ def inject_css() -> None:
             100% { opacity: 1; transform: translateY(0); filter: blur(0); }
         }
 
-        @keyframes premiumGlow {
-            0%, 100% { opacity: 0.38; }
-            50% { opacity: 0.78; }
-        }
-
-        @keyframes glassSweep {
-            0%, 62% { transform: translateX(-120%); }
-            100% { transform: translateX(120%); }
-        }
-
-        @keyframes formSweep {
-            0%, 72% { transform: translateX(-120%); }
-            100% { transform: translateX(120%); }
-        }
-
-        @keyframes chipFloat {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-2px); }
-        }
-
-        @keyframes underlinePulse {
-            0%, 100% { width: 46%; opacity: 0.72; }
-            50% { width: 72%; opacity: 1; }
-        }
-
-        @keyframes cardAuraRotate {
-            0% { transform: rotate(0deg); opacity: 0.40; }
-            50% { opacity: 0.76; }
-            100% { transform: rotate(360deg); opacity: 0.40; }
-        }
-
-        @keyframes buttonGradientFlow {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-        }
-
         @media (max-width: 900px) {
-            .hero-grid, .status-row {
+            .hero-grid,
+            .status-row {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
 
@@ -1113,12 +1139,9 @@ def inject_css() -> None:
             .risk-level-badge {
                 min-width: auto;
             }
-        }
 
-        @media (prefers-reduced-motion: reduce) {
-            *, *::before, *::after {
-                animation: none !important;
-                transition: none !important;
+            .mlops-meta-grid {
+                grid-template-columns: 1fr;
             }
         }
         </style>
@@ -1160,40 +1183,6 @@ def landing_page() -> None:
                         linear-gradient(135deg, #0B0B0B 0%, #050505 48%, #111111 100%);
                 }
 
-                .stage::before {
-                    content: "";
-                    position: absolute;
-                    inset: 0;
-                    background:
-                        linear-gradient(rgba(252,128,25,0.045) 1px, transparent 1px),
-                        linear-gradient(90deg, rgba(252,128,25,0.045) 1px, transparent 1px);
-                    background-size: 58px 58px;
-                    mask-image: radial-gradient(circle at center, black 0%, transparent 78%);
-                    animation: gridDrift 18s linear infinite;
-                    z-index: -5;
-                }
-
-                .network {
-                    position: absolute;
-                    inset: 0;
-                    width: 100%;
-                    height: 100%;
-                    opacity: 0.48;
-                    z-index: -4;
-                }
-
-                .network-line {
-                    stroke: rgba(255,159,69,0.26);
-                    stroke-width: 1.2;
-                    filter: drop-shadow(0 0 8px rgba(252,128,25,0.26));
-                }
-
-                .network-node {
-                    fill: rgba(252,128,25,0.62);
-                    filter: drop-shadow(0 0 12px rgba(252,128,25,0.58));
-                    animation: nodePulse 3.8s ease-in-out infinite;
-                }
-
                 .hero-card {
                     position: relative;
                     width: min(1010px, 100%);
@@ -1210,16 +1199,6 @@ def landing_page() -> None:
                         inset 0 1px 0 rgba(255,255,255,0.10);
                     backdrop-filter: blur(24px);
                     overflow: hidden;
-                }
-
-                .hero-card::after {
-                    content: "";
-                    position: absolute;
-                    inset: 0;
-                    background: linear-gradient(105deg, transparent 0%, transparent 40%, rgba(255,255,255,0.06) 50%, transparent 61%, transparent 100%);
-                    transform: translateX(-115%);
-                    animation: cardSheen 7s ease-in-out infinite;
-                    pointer-events: none;
                 }
 
                 .brand-row {
@@ -1394,21 +1373,6 @@ def landing_page() -> None:
                     color: #FFFFFF;
                 }
 
-                @keyframes gridDrift {
-                    0% { background-position: 0 0, 0 0; }
-                    100% { background-position: 58px 58px, 58px 58px; }
-                }
-
-                @keyframes nodePulse {
-                    0%, 100% { opacity: 0.42; transform: scale(1); }
-                    50% { opacity: 1; transform: scale(1.18); }
-                }
-
-                @keyframes cardSheen {
-                    0%, 62% { transform: translateX(-115%); }
-                    100% { transform: translateX(115%); }
-                }
-
                 @keyframes ecgTrace {
                     0% { stroke-dashoffset: 720; opacity: 0.55; }
                     15% { opacity: 1; }
@@ -1450,25 +1414,6 @@ def landing_page() -> None:
         </head>
         <body>
             <main class="stage">
-                <svg class="network" viewBox="0 0 1200 620" preserveAspectRatio="none">
-                    <line class="network-line" x1="160" y1="110" x2="370" y2="220"/>
-                    <line class="network-line" x1="370" y1="220" x2="590" y2="120"/>
-                    <line class="network-line" x1="590" y1="120" x2="850" y2="210"/>
-                    <line class="network-line" x1="850" y1="210" x2="1035" y2="110"/>
-                    <line class="network-line" x1="220" y1="480" x2="470" y2="390"/>
-                    <line class="network-line" x1="470" y1="390" x2="720" y2="500"/>
-                    <line class="network-line" x1="720" y1="500" x2="990" y2="400"/>
-                    <circle class="network-node" cx="160" cy="110" r="5"/>
-                    <circle class="network-node" cx="370" cy="220" r="5"/>
-                    <circle class="network-node" cx="590" cy="120" r="5"/>
-                    <circle class="network-node" cx="850" cy="210" r="5"/>
-                    <circle class="network-node" cx="1035" cy="110" r="5"/>
-                    <circle class="network-node" cx="220" cy="480" r="5"/>
-                    <circle class="network-node" cx="470" cy="390" r="5"/>
-                    <circle class="network-node" cx="720" cy="500" r="5"/>
-                    <circle class="network-node" cx="990" cy="400" r="5"/>
-                </svg>
-
                 <section class="hero-card">
                     <div class="brand-row">
                         <div class="brand-chip">AI Healthcare MLOps</div>
@@ -1521,7 +1466,7 @@ def landing_page() -> None:
             st.rerun()
 
 
-def sidebar() -> None:
+def sidebar() -> str:
     with st.sidebar:
         render_html(
             """
@@ -1571,9 +1516,18 @@ def sidebar() -> None:
                 ✅ Threshold tuning<br>
                 ✅ MLflow tracking<br>
                 ✅ FastAPI deployment<br>
-                ✅ Streamlit dashboard
+                ✅ Streamlit dashboard<br>
+                ✅ Prediction monitoring
             </div>
             """
+        )
+
+        st.write("")
+
+        page = st.radio(
+            "Navigation",
+            ["Dashboard", "MLOps Pipeline"],
+            horizontal=False,
         )
 
         st.write("")
@@ -1583,6 +1537,8 @@ def sidebar() -> None:
             st.rerun()
 
         st.caption("Built for hackathon demonstration.")
+
+        return page
 
 
 def hero() -> None:
@@ -1599,13 +1555,74 @@ def hero() -> None:
                 <div class="hero-grid">
                     <div class="hero-chip">Clinical Risk Scoring</div>
                     <div class="hero-chip">Machine Learning Pipeline</div>
-                    <div class="hero-chip">MLflow Tracking</div>
+                    <div class="hero-chip">Prediction Monitoring</div>
                     <div class="hero-chip">FastAPI + Streamlit</div>
                 </div>
             </div>
         </div>
         """
     )
+
+
+def monitoring_section(show_logs: bool = True) -> None:
+    summary = get_monitoring_summary()
+
+    total_today = summary["total_today"]
+    high_risk_count = summary["high_risk_count"]
+    average_risk = summary["average_risk"]
+    drift_warning = summary["drift_warning"]
+    drift_color = summary["drift_color"]
+
+    render_html('<div class="section-title">Live Prediction Monitoring</div>')
+
+    render_html(
+        f"""
+        <div class="status-row">
+            <div class="status-card">
+                <div class="status-value">{total_today}</div>
+                <div class="status-label">Total Predictions Today</div>
+            </div>
+
+            <div class="status-card">
+                <div class="status-value">{high_risk_count}</div>
+                <div class="status-label">High-Risk Patients Today</div>
+            </div>
+
+            <div class="status-card">
+                <div class="status-value">{average_risk:.1f}%</div>
+                <div class="status-label">Average Risk Score Today</div>
+            </div>
+
+            <div class="status-card">
+                <div class="status-value">
+                    <span class="monitoring-pill" style="background:{drift_color};">
+                        {escape(str(drift_warning))}
+                    </span>
+                </div>
+                <div class="status-label">Input Drift Warning</div>
+            </div>
+        </div>
+        """
+    )
+
+    render_html(
+        """
+        <div class="explanation">
+            <b>Monitoring Logic:</b><br>
+            Every prediction is logged with timestamp, input summary, risk score, risk level, and model version.
+            This dashboard summarizes today’s prediction traffic and raises a simple drift warning if the average
+            risk score or high-risk pattern becomes unusually elevated.
+        </div>
+        """
+    )
+
+    if show_logs:
+        with st.expander("View Prediction Logs CSV", expanded=False):
+            logs = load_prediction_logs()
+            if logs:
+                st.dataframe(logs, use_container_width=True)
+            else:
+                st.info("No prediction logs yet. Generate one prediction first.")
 
 
 def metrics_panel(metrics: dict) -> None:
@@ -1653,6 +1670,226 @@ def evaluation_graphs() -> None:
                     st.info("Run training to generate this figure.")
 
 
+def mlops_pipeline_page(metrics: dict) -> None:
+    threshold_data = load_threshold()
+
+    threshold_used = (
+        threshold_data.get("threshold")
+        or threshold_data.get("best_threshold")
+        or metrics.get("threshold")
+        or metrics.get("threshold_used")
+        or "Not available"
+    )
+
+    if isinstance(threshold_used, float):
+        threshold_used = f"{threshold_used:.2f}"
+
+    training_date = (
+        metrics.get("training_date")
+        or metrics.get("trained_at")
+        or file_modified_date(MODEL_PATH)
+    )
+
+    best_model_name = (
+        metrics.get("best_model")
+        or metrics.get("best_model_name")
+        or metrics.get("model_name")
+        or "CareGuard saved production model"
+    )
+
+    model_version = get_model_version(metrics)
+    dataset_version = metrics.get("dataset_version") or "UCI Diabetes 130-US Hospitals Dataset v1"
+    mlflow_status = "Available" if MLRUNS_DIR.exists() else "MLflow-ready"
+
+    render_html(
+        """
+        <div class="hero">
+            <div class="hero-content">
+                <div class="hero-kicker">MLOps Pipeline Intelligence</div>
+                <div class="hero-title">MLOps Pipeline</div>
+                <div class="hero-subtitle">
+                    End-to-end machine learning lifecycle for hospital readmission prediction:
+                    from dataset ingestion and preprocessing to model tracking, deployment, monitoring, and governance.
+                </div>
+            </div>
+        </div>
+        """
+    )
+
+    render_html('<div class="section-title">Visual Pipeline Flow</div>')
+
+    render_html(
+        """
+        <div class="mlops-flow">
+            <div class="mlops-step">
+                <div class="mlops-step-icon">01</div>
+                <div class="mlops-step-title">Data Ingestion</div>
+                <div class="mlops-step-sub">UCI diabetes hospital records</div>
+            </div>
+            <div class="mlops-arrow">→</div>
+
+            <div class="mlops-step">
+                <div class="mlops-step-icon">02</div>
+                <div class="mlops-step-title">Preprocessing</div>
+                <div class="mlops-step-sub">Missing values, cleaning, encoding</div>
+            </div>
+            <div class="mlops-arrow">→</div>
+
+            <div class="mlops-step">
+                <div class="mlops-step-icon">03</div>
+                <div class="mlops-step-title">Feature Engineering</div>
+                <div class="mlops-step-sub">Clinical risk signals</div>
+            </div>
+            <div class="mlops-arrow">→</div>
+
+            <div class="mlops-step">
+                <div class="mlops-step-icon">04</div>
+                <div class="mlops-step-title">Model Training</div>
+                <div class="mlops-step-sub">Model comparison pipeline</div>
+            </div>
+            <div class="mlops-arrow">→</div>
+
+            <div class="mlops-step">
+                <div class="mlops-step-icon">05</div>
+                <div class="mlops-step-title">Evaluation</div>
+                <div class="mlops-step-sub">Recall, precision, F1</div>
+            </div>
+            <div class="mlops-arrow">→</div>
+
+            <div class="mlops-step">
+                <div class="mlops-step-icon">06</div>
+                <div class="mlops-step-title">Model Registry</div>
+                <div class="mlops-step-sub">Saved production artifact</div>
+            </div>
+            <div class="mlops-arrow">→</div>
+
+            <div class="mlops-step">
+                <div class="mlops-step-icon">07</div>
+                <div class="mlops-step-title">Streamlit Deployment</div>
+                <div class="mlops-step-sub">Interactive risk dashboard</div>
+            </div>
+            <div class="mlops-arrow">→</div>
+
+            <div class="mlops-step">
+                <div class="mlops-step-icon">08</div>
+                <div class="mlops-step-title">Monitoring</div>
+                <div class="mlops-step-sub">Prediction logs and drift warning</div>
+            </div>
+        </div>
+        """
+    )
+
+    st.write("")
+
+    render_html('<div class="section-title">MLOps Run Metadata</div>')
+
+    render_html(
+        f"""
+        <div class="mlops-meta-grid">
+            <div class="mlops-meta-card">
+                <div class="mlops-meta-label">Model Version</div>
+                <div class="mlops-meta-value">{escape(str(model_version))}</div>
+            </div>
+
+            <div class="mlops-meta-card">
+                <div class="mlops-meta-label">Dataset Version</div>
+                <div class="mlops-meta-value">{escape(str(dataset_version))}</div>
+            </div>
+
+            <div class="mlops-meta-card">
+                <div class="mlops-meta-label">Training Date</div>
+                <div class="mlops-meta-value">{escape(str(training_date))}</div>
+            </div>
+
+            <div class="mlops-meta-card">
+                <div class="mlops-meta-label">Best Model Name</div>
+                <div class="mlops-meta-value">{escape(str(best_model_name))}</div>
+            </div>
+
+            <div class="mlops-meta-card">
+                <div class="mlops-meta-label">Threshold Used</div>
+                <div class="mlops-meta-value">{escape(str(threshold_used))}</div>
+            </div>
+
+            <div class="mlops-meta-card">
+                <div class="mlops-meta-label">MLflow Tracking</div>
+                <div class="mlops-meta-value">{escape(str(mlflow_status))}</div>
+            </div>
+        </div>
+        """
+    )
+
+    st.write("")
+
+    render_html('<div class="section-title">Metrics Logged</div>')
+
+    recall = get_metric_value(metrics, ["recall", "best_recall"])
+    precision = get_metric_value(metrics, ["precision", "best_precision"])
+    f1 = get_metric_value(metrics, ["f1", "f1_score", "best_f1"])
+    accuracy = get_metric_value(metrics, ["accuracy", "best_accuracy"])
+    false_negatives = get_metric_value(metrics, ["false_negatives", "fn"])
+    roc_auc = get_metric_value(metrics, ["roc_auc", "auc"])
+
+    render_html(
+        f"""
+        <div class="status-row">
+            <div class="status-card">
+                <div class="status-value">{escape(str(recall))}</div>
+                <div class="status-label">Recall</div>
+            </div>
+            <div class="status-card">
+                <div class="status-value">{escape(str(precision))}</div>
+                <div class="status-label">Precision</div>
+            </div>
+            <div class="status-card">
+                <div class="status-value">{escape(str(f1))}</div>
+                <div class="status-label">F1 Score</div>
+            </div>
+            <div class="status-card">
+                <div class="status-value">{escape(str(false_negatives))}</div>
+                <div class="status-label">False Negatives</div>
+            </div>
+        </div>
+
+        <div class="status-row">
+            <div class="status-card">
+                <div class="status-value">{escape(str(accuracy))}</div>
+                <div class="status-label">Accuracy</div>
+            </div>
+            <div class="status-card">
+                <div class="status-value">{escape(str(roc_auc))}</div>
+                <div class="status-label">ROC AUC</div>
+            </div>
+            <div class="status-card">
+                <div class="status-value">{escape(str(file_modified_date(MODEL_PATH)))}</div>
+                <div class="status-label">Model Artifact Updated</div>
+            </div>
+            <div class="status-card">
+                <div class="status-value">{escape(str(file_modified_date(METRICS_PATH)))}</div>
+                <div class="status-label">Metrics File Updated</div>
+            </div>
+        </div>
+        """
+    )
+
+    render_html(
+        """
+        <div class="explanation">
+            <b>MLflow Tracking Purpose:</b><br>
+            MLflow is used in MLOps projects to log parameters, metrics, artifacts, model versions,
+            and compare experiment runs. This demo exposes model metadata, saved artifacts,
+            evaluation metrics, threshold, and deployment status for judge-friendly transparency.
+        </div>
+        """
+    )
+
+    with st.expander("View Raw Metrics JSON"):
+        st.json(metrics)
+
+    with st.expander("View Threshold JSON"):
+        st.json(threshold_data if threshold_data else {"threshold": "Not available"})
+
+
 def main() -> None:
     st.set_page_config(
         page_title="CareGuard AI",
@@ -1670,11 +1907,17 @@ def main() -> None:
         landing_page()
         return
 
-    sidebar()
-    hero()
-
     sample = load_sample_patient()
     metrics = load_metrics()
+    model_version = get_model_version(metrics)
+
+    selected_page = sidebar()
+
+    if selected_page == "MLOps Pipeline":
+        mlops_pipeline_page(metrics)
+        return
+
+    hero()
 
     render_html(
         f"""
@@ -1698,6 +1941,8 @@ def main() -> None:
             </div>
             """
         )
+
+        st.write("")
 
         with st.form("patient_form"):
             tab1, tab2, tab3, tab4 = st.tabs(["Patient", "Admission", "Clinical", "Diabetes Care"])
@@ -1791,6 +2036,37 @@ def main() -> None:
         "diabetesMed": diabetes_med,
     }
 
+    prediction_result = None
+    prediction_error = None
+
+    if submitted:
+        try:
+            with st.spinner("CareGuard AI is analyzing patient risk..."):
+                prediction_result = predict_readmission(patient_payload)
+
+            probability = float(prediction_result["risk_probability"])
+            probability_percent = probability * 100
+            dashboard_risk_level, dashboard_risk_color = get_dashboard_risk_level(probability_percent)
+
+            log_prediction_event(
+                patient_payload=patient_payload,
+                patient_id=patient_id,
+                patient_name=patient_name,
+                risk_score_percent=probability_percent,
+                risk_level=dashboard_risk_level,
+                prediction=str(prediction_result["prediction"]),
+                model_version=model_version,
+            )
+
+        except FileNotFoundError:
+            prediction_error = "Model not found. First run `python src/train.py` from the project root."
+        except Exception as exc:
+            prediction_error = f"Prediction failed: {exc}"
+
+    with left:
+        st.write("")
+        monitoring_section(show_logs=True)
+
     with right:
         render_html('<div class="section-title">AI Risk Command Center</div>')
 
@@ -1804,79 +2080,73 @@ def main() -> None:
             """
         )
 
-        if submitted:
-            try:
-                with st.spinner("CareGuard AI is analyzing patient risk..."):
-                    result = predict_readmission(patient_payload)
+        if prediction_error:
+            st.error(prediction_error)
 
-                probability = float(result["risk_probability"])
-                probability_percent = probability * 100
-                dashboard_risk_level, dashboard_risk_color = get_dashboard_risk_level(probability_percent)
+        elif prediction_result:
+            probability = float(prediction_result["risk_probability"])
+            probability_percent = probability * 100
+            dashboard_risk_level, dashboard_risk_color = get_dashboard_risk_level(probability_percent)
 
-                risk_placeholder = st.empty()
-                animate_risk_score(
-                    placeholder=risk_placeholder,
-                    target_percent=probability_percent,
-                    color=dashboard_risk_color,
-                    risk_level=dashboard_risk_level,
-                    prediction=str(result["prediction"]),
-                )
+            risk_placeholder = st.empty()
+            animate_risk_score(
+                placeholder=risk_placeholder,
+                target_percent=probability_percent,
+                color=dashboard_risk_color,
+                risk_level=dashboard_risk_level,
+                prediction=str(prediction_result["prediction"]),
+            )
 
-                st.progress(min(max(probability, 0.0), 1.0))
+            st.progress(min(max(probability, 0.0), 1.0))
 
-                render_html(
-                    f"""
-                    <div class="status-row">
-                        <div class="status-card">
-                            <div class="status-value">{float(result["threshold_used"]):.2f}</div>
-                            <div class="status-label">Threshold</div>
-                        </div>
-                        <div class="status-card">
-                            <div class="status-value">{float(metrics.get("recall", 0)):.2f}</div>
-                            <div class="status-label">Recall</div>
-                        </div>
-                        <div class="status-card">
-                            <div class="status-value">{float(metrics.get("precision", 0)):.2f}</div>
-                            <div class="status-label">Precision</div>
-                        </div>
-                        <div class="status-card">
-                            <div class="status-value">{metrics.get("false_negatives", 0)}</div>
-                            <div class="status-label">False Negatives</div>
-                        </div>
+            render_html(
+                f"""
+                <div class="status-row">
+                    <div class="status-card">
+                        <div class="status-value">{float(prediction_result["threshold_used"]):.2f}</div>
+                        <div class="status-label">Threshold</div>
                     </div>
-                    """
-                )
-
-                render_html(
-                    f"""
-                    <div class="explanation">
-                        <b>Explanation</b><br>
-                        {escape(str(result["explanation"]))}
+                    <div class="status-card">
+                        <div class="status-value">{float(metrics.get("recall", 0)):.2f}</div>
+                        <div class="status-label">Recall</div>
                     </div>
-                    """
-                )
-
-                render_html(
-                    f"""
-                    <div class="recommendation">
-                        <b>Recommended Care Action</b><br>
-                        {escape(str(result["recommendation"]))}
+                    <div class="status-card">
+                        <div class="status-value">{float(metrics.get("precision", 0)):.2f}</div>
+                        <div class="status-label">Precision</div>
                     </div>
-                    """
-                )
-
-                render_html(
-                    f"""
-                    <div class="warning-box">
-                        <b>Disclaimer:</b> {escape(str(result["clinical_disclaimer"]))}
+                    <div class="status-card">
+                        <div class="status-value">{metrics.get("false_negatives", 0)}</div>
+                        <div class="status-label">False Negatives</div>
                     </div>
-                    """
-                )
+                </div>
+                """
+            )
 
-            except FileNotFoundError:
-                st.error("Model not found. First run `python src/train.py` from the project root.")
-            except Exception as exc:
-                st.error(f"Prediction failed: {exc}")
+            render_html(
+                f"""
+                <div class="explanation">
+                    <b>Explanation</b><br>
+                    {escape(str(prediction_result["explanation"]))}
+                </div>
+                """
+            )
+
+            render_html(
+                f"""
+                <div class="recommendation">
+                    <b>Recommended Care Action</b><br>
+                    {escape(str(prediction_result["recommendation"]))}
+                </div>
+                """
+            )
+
+            render_html(
+                f"""
+                <div class="warning-box">
+                    <b>Disclaimer:</b> {escape(str(prediction_result["clinical_disclaimer"]))}
+                </div>
+                """
+            )
 
         else:
             render_html(
@@ -1912,7 +2182,7 @@ def main() -> None:
             """
             <div class="tiny-text">
                 CareGuard AI compares models, logs experiments using MLflow, saves model artifacts,
-                tunes thresholds for recall, and exposes predictions through both FastAPI and Streamlit.
+                tunes thresholds for recall, and logs prediction events for simple post-deployment monitoring.
             </div>
             """
         )
