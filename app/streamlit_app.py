@@ -210,6 +210,146 @@ def inject_css() -> None:
             color: var(--text) !important;
         }
 
+        .sidebar-brand-card {
+            padding: 1rem;
+            border-radius: 24px;
+            background:
+                linear-gradient(135deg, rgba(24,24,24,0.94), rgba(5,5,5,0.88)),
+                radial-gradient(circle at top right, rgba(252,128,25,0.16), transparent 48%);
+            border: 1px solid rgba(252,128,25,0.26);
+            box-shadow: 0 18px 52px rgba(0,0,0,0.40), 0 0 28px rgba(252,128,25,0.08);
+            margin-bottom: 1rem;
+        }
+
+        .sidebar-brand-title {
+            font-size: 1.25rem;
+            font-weight: 950;
+            letter-spacing: -0.03em;
+            background: linear-gradient(90deg, #FFFFFF, #FF9F45, #FC8019);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.35rem;
+        }
+
+        .sidebar-brand-sub {
+            color: #D1D5DB !important;
+            font-size: 0.82rem;
+            font-weight: 650;
+        }
+
+        .sidebar-section-label {
+            margin: 1.1rem 0 0.7rem 0;
+            color: #FFFFFF;
+            font-size: 1rem;
+            font-weight: 950;
+            letter-spacing: -0.015em;
+        }
+
+        .sidebar-status-stack {
+            display: grid;
+            gap: 0.78rem;
+            margin: 0.4rem 0 1.1rem 0;
+        }
+
+        .sidebar-status-card {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 0.78rem;
+            padding: 0.88rem 0.92rem;
+            border-radius: 22px;
+            background:
+                linear-gradient(135deg, rgba(24,24,24,0.92), rgba(5,5,5,0.84)),
+                radial-gradient(circle at top right, rgba(252,128,25,0.10), transparent 45%);
+            border: 1px solid rgba(252,128,25,0.24);
+            box-shadow:
+                0 16px 44px rgba(0,0,0,0.38),
+                inset 0 1px 0 rgba(255,255,255,0.06);
+            overflow: hidden;
+            transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+        }
+
+        .sidebar-status-card::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(105deg, transparent 0%, transparent 44%, rgba(255,159,69,0.10) 50%, transparent 58%, transparent 100%);
+            transform: translateX(-120%);
+            animation: sidebarSweep 7s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        .sidebar-status-card:hover {
+            transform: translateY(-3px);
+            border-color: rgba(255,159,69,0.48);
+            box-shadow:
+                0 24px 68px rgba(0,0,0,0.52),
+                0 0 30px rgba(252,128,25,0.14);
+        }
+
+        .sidebar-status-icon {
+            width: 42px;
+            height: 42px;
+            min-width: 42px;
+            border-radius: 16px;
+            display: grid;
+            place-items: center;
+            font-size: 1.1rem;
+            font-weight: 950;
+            color: #050505 !important;
+            background: linear-gradient(135deg, #FF9F45, #FC8019);
+            box-shadow: 0 0 26px rgba(252,128,25,0.24);
+            position: relative;
+            z-index: 1;
+        }
+
+        .sidebar-status-copy {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.15rem;
+        }
+
+        .sidebar-status-title {
+            color: #FFFFFF !important;
+            font-size: 0.95rem;
+            font-weight: 900;
+            line-height: 1.2;
+        }
+
+        .sidebar-status-sub {
+            color: #D1D5DB !important;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+        }
+
+        .sidebar-status-live {
+            position: absolute;
+            right: 0.85rem;
+            top: 0.85rem;
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            background: #22c55e;
+            box-shadow: 0 0 16px rgba(34,197,94,0.85);
+            z-index: 1;
+            animation: livePulse 1.8s ease-in-out infinite;
+        }
+
+        .pipeline-box {
+            padding: 1rem;
+            border-radius: 24px;
+            background: rgba(24,24,24,0.76);
+            border: 1px solid rgba(252,128,25,0.18);
+            box-shadow: 0 16px 44px rgba(0,0,0,0.30);
+            line-height: 1.9;
+            font-weight: 700;
+            color: #D1D5DB !important;
+        }
+
         [data-testid="stAlert"] {
             background: rgba(24,24,24,0.82) !important;
             border: 1px solid rgba(252,128,25,0.18) !important;
@@ -759,22 +899,43 @@ def inject_css() -> None:
 
         div[data-baseweb="popover"],
         div[data-baseweb="popover"] ul,
-        div[role="listbox"] {
+        div[data-baseweb="popover"] li,
+        div[data-baseweb="menu"],
+        div[role="listbox"],
+        ul[role="listbox"] {
             background: #111111 !important;
-            color: var(--text) !important;
+            color: #FFFFFF !important;
             border-radius: 18px !important;
-            border: 1px solid rgba(252,128,25,0.24);
-            box-shadow: 0 18px 60px rgba(0,0,0,0.55);
+            border: 1px solid rgba(252,128,25,0.30) !important;
+            box-shadow: 0 20px 70px rgba(0,0,0,0.65), 0 0 28px rgba(252,128,25,0.12) !important;
         }
 
-        div[role="option"] {
+        div[data-baseweb="popover"] *,
+        div[data-baseweb="menu"] *,
+        div[role="listbox"] *,
+        div[role="option"] *,
+        li[role="option"] *,
+        ul[role="listbox"] * {
+            color: #FFFFFF !important;
+            -webkit-text-fill-color: #FFFFFF !important;
+            opacity: 1 !important;
+        }
+
+        div[role="option"],
+        li[role="option"] {
             background: #111111 !important;
-            color: var(--text) !important;
+            color: #FFFFFF !important;
+            -webkit-text-fill-color: #FFFFFF !important;
+            font-weight: 700 !important;
         }
 
-        div[role="option"]:hover {
-            background: rgba(252,128,25,0.18) !important;
-            color: var(--text) !important;
+        div[role="option"]:hover,
+        li[role="option"]:hover,
+        div[role="option"][aria-selected="true"],
+        li[role="option"][aria-selected="true"] {
+            background: rgba(252,128,25,0.22) !important;
+            color: #FFFFFF !important;
+            -webkit-text-fill-color: #FFFFFF !important;
         }
 
         input, textarea {
@@ -782,20 +943,81 @@ def inject_css() -> None:
         }
 
         div[data-testid="stExpander"] {
-            background: rgba(24,24,24,0.76) !important;
-            border: 1px solid rgba(255,255,255,0.10) !important;
-            border-radius: 20px !important;
-            box-shadow: 0 16px 48px rgba(0,0,0,0.28);
+            background: rgba(24,24,24,0.82) !important;
+            border: 1px solid rgba(252,128,25,0.28) !important;
+            border-radius: 22px !important;
+            box-shadow: 0 16px 48px rgba(0,0,0,0.35), 0 0 30px rgba(252,128,25,0.08);
             overflow: hidden;
         }
 
-        div[data-testid="stExpander"] * {
-            color: var(--text-secondary) !important;
+        div[data-testid="stExpander"] details {
+            background: rgba(24,24,24,0.82) !important;
+            border-radius: 22px !important;
         }
 
-        pre, code, div[data-testid="stJson"] {
-            background: rgba(5,5,5,0.96) !important;
+        div[data-testid="stExpander"] summary {
+            background:
+                linear-gradient(135deg, rgba(24,24,24,0.96), rgba(5,5,5,0.92)) !important;
             color: #FFFFFF !important;
+            border-bottom: 1px solid rgba(252,128,25,0.20) !important;
+            padding: 0.9rem 1rem !important;
+            font-weight: 850 !important;
+        }
+
+        div[data-testid="stExpander"] summary:hover {
+            background:
+                linear-gradient(135deg, rgba(252,128,25,0.16), rgba(24,24,24,0.94)) !important;
+        }
+
+        div[data-testid="stExpander"] summary *,
+        div[data-testid="stExpander"] svg {
+            color: #FFFFFF !important;
+            fill: #FFFFFF !important;
+            -webkit-text-fill-color: #FFFFFF !important;
+            opacity: 1 !important;
+        }
+
+        div[data-testid="stExpander"] div[role="button"] {
+            background: transparent !important;
+            color: #FFFFFF !important;
+        }
+
+        div[data-testid="stExpander"] * {
+            color: #D1D5DB !important;
+            -webkit-text-fill-color: #D1D5DB !important;
+        }
+
+        div[data-testid="stJson"],
+        div[data-testid="stJson"] > div,
+        div[data-testid="stJson"] pre,
+        div[data-testid="stJson"] code,
+        div[data-testid="stJson"] section,
+        div[data-testid="stJson"] article {
+            background: #050505 !important;
+            color: #FFFFFF !important;
+            -webkit-text-fill-color: #FFFFFF !important;
+            border-radius: 18px !important;
+            border-color: rgba(252,128,25,0.22) !important;
+        }
+
+        div[data-testid="stJson"] {
+            border: 1px solid rgba(252,128,25,0.24) !important;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 16px 42px rgba(0,0,0,0.35) !important;
+            overflow: hidden !important;
+        }
+
+        div[data-testid="stJson"] *,
+        div[data-testid="stJson"] span {
+            background: transparent !important;
+            color: #FFFFFF !important;
+            -webkit-text-fill-color: #FFFFFF !important;
+            opacity: 1 !important;
+        }
+
+        pre, code {
+            background: #050505 !important;
+            color: #FFFFFF !important;
+            -webkit-text-fill-color: #FFFFFF !important;
             border: 1px solid rgba(252,128,25,0.18) !important;
             border-radius: 16px !important;
         }
@@ -807,6 +1029,16 @@ def inject_css() -> None:
             font-size: 0.9rem;
             font-weight: 650;
             animation: softLift 900ms ease-out both;
+        }
+
+        @keyframes sidebarSweep {
+            0%, 68% { transform: translateX(-120%); }
+            100% { transform: translateX(120%); }
+        }
+
+        @keyframes livePulse {
+            0%, 100% { transform: scale(1); opacity: 0.75; }
+            50% { transform: scale(1.55); opacity: 1; }
         }
 
         @keyframes appAuraShift {
@@ -1291,33 +1523,60 @@ def landing_page() -> None:
 
 def sidebar() -> None:
     with st.sidebar:
-        st.markdown("## CareGuard AI")
-        st.caption("Hospital Readmission Risk Scorer")
-
-        st.divider()
-
-        st.markdown("### System Status")
-        st.success("Model loaded")
-        st.info("FastAPI ready")
-        st.warning("Clinical demo only")
-
-        st.divider()
-
-        st.markdown("### MLOps Pipeline")
-        st.markdown(
+        render_html(
             """
-            ✅ Data preprocessing  
-            ✅ Missing value handling  
-            ✅ Feature engineering  
-            ✅ Model comparison  
-            ✅ Threshold tuning  
-            ✅ MLflow tracking  
-            ✅ FastAPI deployment  
-            ✅ Streamlit dashboard  
+            <div class="sidebar-brand-card">
+                <div class="sidebar-brand-title">CareGuard AI</div>
+                <div class="sidebar-brand-sub">Hospital Readmission Risk Scorer</div>
+            </div>
+
+            <div class="sidebar-section-label">System Status</div>
+
+            <div class="sidebar-status-stack">
+                <div class="sidebar-status-card">
+                    <div class="sidebar-status-live"></div>
+                    <div class="sidebar-status-icon">ML</div>
+                    <div class="sidebar-status-copy">
+                        <div class="sidebar-status-title">Model Engine</div>
+                        <div class="sidebar-status-sub">Loaded & ready</div>
+                    </div>
+                </div>
+
+                <div class="sidebar-status-card">
+                    <div class="sidebar-status-live"></div>
+                    <div class="sidebar-status-icon">API</div>
+                    <div class="sidebar-status-copy">
+                        <div class="sidebar-status-title">FastAPI Layer</div>
+                        <div class="sidebar-status-sub">Endpoint prepared</div>
+                    </div>
+                </div>
+
+                <div class="sidebar-status-card">
+                    <div class="sidebar-status-live"></div>
+                    <div class="sidebar-status-icon">AI</div>
+                    <div class="sidebar-status-copy">
+                        <div class="sidebar-status-title">Clinical Demo</div>
+                        <div class="sidebar-status-sub">Decision support only</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar-section-label">MLOps Pipeline</div>
+
+            <div class="pipeline-box">
+                ✅ Data preprocessing<br>
+                ✅ Missing value handling<br>
+                ✅ Feature engineering<br>
+                ✅ Model comparison<br>
+                ✅ Threshold tuning<br>
+                ✅ MLflow tracking<br>
+                ✅ FastAPI deployment<br>
+                ✅ Streamlit dashboard
+            </div>
             """
         )
 
-        st.divider()
+        st.write("")
 
         if st.button("Back to Launch Page"):
             st.session_state.app_started = False
