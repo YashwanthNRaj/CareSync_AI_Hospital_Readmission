@@ -134,14 +134,26 @@ def risk_emoji() -> str:
 
 
 def is_valid_diagnosis_code(code: Any) -> bool:
+    """
+    Dataset-compatible diagnosis validation for UCI Diabetes 130-US Hospitals.
+
+    Valid examples:
+    250.83, 276, 648, 8, 38, 250.43, 403, V27, V45, ?
+
+    Invalid examples:
+    abc, 25A, empty value, @@@
+    """
     code_str = str(code).strip().upper()
 
     if not code_str:
         return False
 
-    numeric_pattern = r"^\d{3}(\.\d{1,2})?$"
-    v_code_pattern = r"^V\d{2,3}(\.\d{1,2})?$"
-    e_code_pattern = r"^E\d{3,4}(\.\d{1})?$"
+    if code_str == "?":
+        return True
+
+    numeric_pattern = r"^\d{1,3}(\.\d{1,2})?$"
+    v_code_pattern = r"^V\d{1,3}(\.\d{1,2})?$"
+    e_code_pattern = r"^E\d{1,4}(\.\d{1})?$"
 
     return bool(
         re.match(numeric_pattern, code_str)
@@ -162,7 +174,7 @@ def validate_diagnosis_codes(patient_payload: dict) -> list[str]:
     for label, value in diagnosis_fields.items():
         if not is_valid_diagnosis_code(value):
             errors.append(
-                f"{label} has invalid code '{value}'. Use ICD-9 style codes like 250.83, 401, 428, V58, or E849."
+                f"{label} has invalid code '{value}'. Use dataset-style diagnosis codes like 250.83, 401, 428, 38, 8, V27, V45, or ?."
             )
 
     return errors
@@ -173,10 +185,7 @@ def get_prediction_payload(patient_payload: dict) -> dict:
 
 
 def get_advanced_medication_values(patient_payload: dict) -> dict:
-    return {
-        field: patient_payload.get(field, "No")
-        for field in ADVANCED_MEDICATION_FIELDS
-    }
+    return {field: patient_payload.get(field, "No") for field in ADVANCED_MEDICATION_FIELDS}
 
 
 def generate_top_risk_signals(patient_payload: dict, probability_percent: float) -> list[str]:
@@ -543,7 +552,6 @@ def inject_css() -> None:
             --accent:#FC8019;
             --accent-bright:#FF9F45;
             --accent-dark:#D96B12;
-            --accent-glow:rgba(252,128,25,0.35);
             --text:#FFFFFF;
             --text-secondary:#D1D5DB;
             --muted:#9CA3AF;
@@ -648,16 +656,6 @@ def inject_css() -> None:
                 inset 0 1px 0 rgba(255,255,255,0.06);
             overflow: hidden;
             transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
-        }
-
-        .sidebar-status-card::before {
-            content: "";
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(105deg, transparent 0%, transparent 44%, rgba(255,159,69,0.10) 50%, transparent 58%, transparent 100%);
-            transform: translateX(-120%);
-            animation: sidebarSweep 7s ease-in-out infinite;
-            pointer-events: none;
         }
 
         .sidebar-status-card:hover {
@@ -1375,11 +1373,6 @@ def inject_css() -> None:
             margin-top: 1.5rem;
             font-size: 0.9rem;
             font-weight: 650;
-        }
-
-        @keyframes sidebarSweep {
-            0%, 68% { transform: translateX(-120%); }
-            100% { transform: translateX(120%); }
         }
 
         @keyframes livePulse {
@@ -2375,8 +2368,8 @@ def main() -> None:
                     """
                     <div class="warning-box">
                         <b>Diagnosis Code Error</b><br>
-                        Diagnosis codes must be valid ICD-9 style values. Examples: 250.83, 401, 428, V58, E849.
-                        Codes like 40 or 42 are too short and will not be accepted.
+                        Diagnosis codes must match dataset-style values. Examples: 250.83, 401, 428, 38, 8, V27, V45, or ?.
+                        Blank values, letters like abc, or mixed invalid values like 25A are not accepted.
                     </div>
                     """
                 )
