@@ -27,6 +27,45 @@ THRESHOLD_PATH = PROJECT_ROOT / "models" / "threshold.json"
 MLRUNS_DIR = PROJECT_ROOT / "mlruns"
 PREDICTION_LOG_PATH = PROJECT_ROOT / "reports" / "prediction_logs.csv"
 
+ADVANCED_MEDICATION_FIELDS = [
+    "repaglinide",
+    "nateglinide",
+    "glimepiride",
+    "glipizide",
+    "glyburide",
+    "pioglitazone",
+    "rosiglitazone",
+    "acarbose",
+    "miglitol",
+    "glyburide-metformin",
+]
+
+BASE_MODEL_FIELD_KEYS = [
+    "race",
+    "gender",
+    "age",
+    "admission_type_id",
+    "discharge_disposition_id",
+    "admission_source_id",
+    "time_in_hospital",
+    "num_lab_procedures",
+    "num_procedures",
+    "num_medications",
+    "number_outpatient",
+    "number_emergency",
+    "number_inpatient",
+    "diag_1",
+    "diag_2",
+    "diag_3",
+    "number_diagnoses",
+    "max_glu_serum",
+    "A1Cresult",
+    "metformin",
+    "insulin",
+    "change",
+    "diabetesMed",
+]
+
 
 def render_html(markup: str) -> None:
     cleaned = " ".join(dedent(markup).strip().splitlines())
@@ -94,6 +133,52 @@ def risk_emoji() -> str:
     return "●"
 
 
+def is_valid_diagnosis_code(code: Any) -> bool:
+    code_str = str(code).strip().upper()
+
+    if not code_str:
+        return False
+
+    numeric_pattern = r"^\d{3}(\.\d{1,2})?$"
+    v_code_pattern = r"^V\d{2,3}(\.\d{1,2})?$"
+    e_code_pattern = r"^E\d{3,4}(\.\d{1})?$"
+
+    return bool(
+        re.match(numeric_pattern, code_str)
+        or re.match(v_code_pattern, code_str)
+        or re.match(e_code_pattern, code_str)
+    )
+
+
+def validate_diagnosis_codes(patient_payload: dict) -> list[str]:
+    errors: list[str] = []
+
+    diagnosis_fields = {
+        "Diagnosis 1": patient_payload.get("diag_1"),
+        "Diagnosis 2": patient_payload.get("diag_2"),
+        "Diagnosis 3": patient_payload.get("diag_3"),
+    }
+
+    for label, value in diagnosis_fields.items():
+        if not is_valid_diagnosis_code(value):
+            errors.append(
+                f"{label} has invalid code '{value}'. Use ICD-9 style codes like 250.83, 401, 428, V58, or E849."
+            )
+
+    return errors
+
+
+def get_prediction_payload(patient_payload: dict) -> dict:
+    return {key: patient_payload.get(key) for key in BASE_MODEL_FIELD_KEYS}
+
+
+def get_advanced_medication_values(patient_payload: dict) -> dict:
+    return {
+        field: patient_payload.get(field, "No")
+        for field in ADVANCED_MEDICATION_FIELDS
+    }
+
+
 def generate_top_risk_signals(patient_payload: dict, probability_percent: float) -> list[str]:
     signals: list[str] = []
 
@@ -107,6 +192,18 @@ def generate_top_risk_signals(patient_payload: dict, probability_percent: float)
     insulin = str(patient_payload.get("insulin", "No"))
     change = str(patient_payload.get("change", "No"))
     max_glu_serum = str(patient_payload.get("max_glu_serum", "None"))
+
+    advanced_medications = get_advanced_medication_values(patient_payload)
+    advanced_active = [
+        medication
+        for medication, status in advanced_medications.items()
+        if status in ["Steady", "Up", "Down"]
+    ]
+    advanced_changed = [
+        medication
+        for medication, status in advanced_medications.items()
+        if status in ["Up", "Down"]
+    ]
 
     if number_inpatient >= 2:
         signals.append("Prior inpatient visits are high, which can indicate repeated hospital utilization.")
@@ -138,6 +235,12 @@ def generate_top_risk_signals(patient_payload: dict, probability_percent: float)
     if age in ["[70-80)", "[80-90)", "[90-100)"]:
         signals.append("Older age group may increase vulnerability to readmission.")
 
+    if advanced_changed:
+        signals.append("Advanced medication dosage change detected, suggesting active diabetes treatment adjustment.")
+
+    if len(advanced_active) >= 2:
+        signals.append("Multiple diabetes medications are active, suggesting complex diabetes-care management.")
+
     if not signals and probability_percent <= 30:
         signals = [
             "No major high-risk utilization pattern detected.",
@@ -151,7 +254,7 @@ def generate_top_risk_signals(patient_payload: dict, probability_percent: float)
             "Follow-up monitoring is recommended based on the model score.",
         ]
 
-    return signals[:7]
+    return signals[:8]
 
 
 def render_top_risk_signals(signals: list[str]) -> None:
@@ -231,6 +334,7 @@ def build_patient_risk_report(
         -----
         This report is generated for AI-assisted clinical decision support.
         Final clinical decisions must be made by qualified healthcare professionals.
+        Advanced Medication Profile fields are shown for dataset completeness. The prediction engine uses the model-supported clinical feature payload.
         """
     ).strip()
 
@@ -1827,9 +1931,6 @@ def metrics_panel(metrics: dict) -> None:
         """
     )
 
-    with st.expander("View full metrics JSON"):
-        st.json(metrics)
-
 
 def evaluation_graphs() -> None:
     with st.expander("View Model Evaluation Graphs", expanded=False):
@@ -2124,6 +2225,8 @@ def main() -> None:
 
         st.write("")
 
+        advanced_medication_profile: dict[str, str] = {}
+
         with st.form("patient_form"):
             tab1, tab2, tab3, tab4 = st.tabs(["Patient", "Admission", "Clinical", "Diabetes Care"])
 
@@ -2192,6 +2295,32 @@ def main() -> None:
                     change = st.selectbox("Medication change", change_options, index=get_select_index(change_options, sample.get("change", "Ch"), 1))
                     diabetes_med = st.selectbox("Diabetes medication", diabetes_med_options, index=get_select_index(diabetes_med_options, sample.get("diabetesMed", "Yes"), 1))
 
+                with st.expander("Advanced Medication Profile", expanded=False):
+                    render_html(
+                        """
+                        <div class="tiny-text">
+                            The original UCI dataset contains multiple medication-specific columns.
+                            These advanced fields are optional and shown for dataset completeness.
+                        </div>
+                        """
+                    )
+
+                    adv_col1, adv_col2 = st.columns(2)
+
+                    for index, medication_name in enumerate(ADVANCED_MEDICATION_FIELDS):
+                        target_col = adv_col1 if index % 2 == 0 else adv_col2
+                        with target_col:
+                            advanced_medication_profile[medication_name] = st.selectbox(
+                                medication_name,
+                                medicine_options,
+                                index=get_select_index(
+                                    medicine_options,
+                                    sample.get(medication_name, "No"),
+                                    0,
+                                ),
+                                key=f"advanced_med_{medication_name}",
+                            )
+
             submitted = st.form_submit_button("Generate Readmission Risk Score")
 
     patient_payload = {
@@ -2218,7 +2347,10 @@ def main() -> None:
         "insulin": insulin,
         "change": change,
         "diabetesMed": diabetes_med,
+        **advanced_medication_profile,
     }
+
+    prediction_payload = get_prediction_payload(patient_payload)
 
     with right:
         render_html('<div class="section-title">AI Risk Command Center</div>')
@@ -2234,118 +2366,137 @@ def main() -> None:
         )
 
         if submitted:
-            try:
-                with st.spinner("CareGuard AI is analyzing patient risk..."):
-                    prediction_result = predict_readmission(patient_payload)
+            diagnosis_errors = validate_diagnosis_codes(patient_payload)
 
-                probability = float(prediction_result["risk_probability"])
-                probability_percent = probability * 100
-                dashboard_risk_level, dashboard_risk_color = get_dashboard_risk_level(probability_percent)
-                top_risk_signals = generate_top_risk_signals(patient_payload, probability_percent)
-                report_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-                log_prediction_event(
-                    patient_payload=patient_payload,
-                    patient_id=patient_id,
-                    patient_name=patient_name,
-                    risk_score_percent=probability_percent,
-                    risk_level=dashboard_risk_level,
-                    prediction=str(prediction_result["prediction"]),
-                    model_version=model_version,
-                )
-
-                risk_placeholder = st.empty()
-                animate_risk_score(
-                    placeholder=risk_placeholder,
-                    target_percent=probability_percent,
-                    color=dashboard_risk_color,
-                    risk_level=dashboard_risk_level,
-                    prediction=str(prediction_result["prediction"]),
-                )
-
-                report_text = build_patient_risk_report(
-                    patient_id=patient_id,
-                    patient_name=patient_name,
-                    care_coordinator=care_coordinator,
-                    risk_score_percent=probability_percent,
-                    risk_level=dashboard_risk_level,
-                    prediction=str(prediction_result["prediction"]),
-                    explanation=str(prediction_result["explanation"]),
-                    recommendation=str(prediction_result["recommendation"]),
-                    disclaimer=str(prediction_result["clinical_disclaimer"]),
-                    model_version=model_version,
-                    top_risk_signals=top_risk_signals,
-                    patient_payload=patient_payload,
-                    report_timestamp=report_timestamp,
-                )
-
-                safe_patient_id = re.sub(r"[^A-Za-z0-9_-]+", "_", patient_id).strip("_") or "patient"
-
-                st.download_button(
-                    label="Download Risk Report",
-                    data=report_text,
-                    file_name=f"careguard_risk_report_{safe_patient_id}.txt",
-                    mime="text/plain",
-                    use_container_width=True,
-                )
-
-                st.progress(min(max(probability, 0.0), 1.0))
-
-                render_top_risk_signals(top_risk_signals)
+            if diagnosis_errors:
+                st.error("Invalid diagnosis code detected. Please correct the diagnosis fields before prediction.")
 
                 render_html(
-                    f"""
-                    <div class="status-row">
-                        <div class="status-card">
-                            <div class="status-value">{float(prediction_result["threshold_used"]):.2f}</div>
-                            <div class="status-label">Threshold</div>
-                        </div>
-                        <div class="status-card">
-                            <div class="status-value">{float(metrics.get("recall", 0)):.2f}</div>
-                            <div class="status-label">Recall</div>
-                        </div>
-                        <div class="status-card">
-                            <div class="status-value">{float(metrics.get("precision", 0)):.2f}</div>
-                            <div class="status-label">Precision</div>
-                        </div>
-                        <div class="status-card">
-                            <div class="status-value">{metrics.get("false_negatives", 0)}</div>
-                            <div class="status-label">False Negatives</div>
-                        </div>
-                    </div>
                     """
-                )
-
-                render_html(
-                    f"""
-                    <div class="explanation">
-                        <b>Model Explanation</b><br>
-                        {escape(str(prediction_result["explanation"]))}
-                    </div>
-                    """
-                )
-
-                render_html(
-                    f"""
-                    <div class="recommendation">
-                        <b>Recommended Care Action</b><br>
-                        {escape(str(prediction_result["recommendation"]))}
-                    </div>
-                    """
-                )
-
-                render_html(
-                    f"""
                     <div class="warning-box">
-                        <b>Disclaimer:</b> {escape(str(prediction_result["clinical_disclaimer"]))}
+                        <b>Diagnosis Code Error</b><br>
+                        Diagnosis codes must be valid ICD-9 style values. Examples: 250.83, 401, 428, V58, E849.
+                        Codes like 40 or 42 are too short and will not be accepted.
                     </div>
                     """
                 )
 
-            except FileNotFoundError:
-                st.error("Model not found. First run `python src/train.py` from the project root.")
-            except Exception as exc:
-                st.error(f"Prediction failed: {exc}")
+                for error in diagnosis_errors:
+                    st.warning(error)
+
+            else:
+                try:
+                    with st.spinner("CareGuard AI is analyzing patient risk..."):
+                        prediction_result = predict_readmission(prediction_payload)
+
+                    probability = float(prediction_result["risk_probability"])
+                    probability_percent = probability * 100
+                    dashboard_risk_level, dashboard_risk_color = get_dashboard_risk_level(probability_percent)
+                    top_risk_signals = generate_top_risk_signals(patient_payload, probability_percent)
+                    report_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                    log_prediction_event(
+                        patient_payload=prediction_payload,
+                        patient_id=patient_id,
+                        patient_name=patient_name,
+                        risk_score_percent=probability_percent,
+                        risk_level=dashboard_risk_level,
+                        prediction=str(prediction_result["prediction"]),
+                        model_version=model_version,
+                    )
+
+                    risk_placeholder = st.empty()
+                    animate_risk_score(
+                        placeholder=risk_placeholder,
+                        target_percent=probability_percent,
+                        color=dashboard_risk_color,
+                        risk_level=dashboard_risk_level,
+                        prediction=str(prediction_result["prediction"]),
+                    )
+
+                    report_text = build_patient_risk_report(
+                        patient_id=patient_id,
+                        patient_name=patient_name,
+                        care_coordinator=care_coordinator,
+                        risk_score_percent=probability_percent,
+                        risk_level=dashboard_risk_level,
+                        prediction=str(prediction_result["prediction"]),
+                        explanation=str(prediction_result["explanation"]),
+                        recommendation=str(prediction_result["recommendation"]),
+                        disclaimer=str(prediction_result["clinical_disclaimer"]),
+                        model_version=model_version,
+                        top_risk_signals=top_risk_signals,
+                        patient_payload=patient_payload,
+                        report_timestamp=report_timestamp,
+                    )
+
+                    safe_patient_id = re.sub(r"[^A-Za-z0-9_-]+", "_", patient_id).strip("_") or "patient"
+
+                    st.download_button(
+                        label="Download Risk Report",
+                        data=report_text,
+                        file_name=f"careguard_risk_report_{safe_patient_id}.txt",
+                        mime="text/plain",
+                        use_container_width=True,
+                    )
+
+                    st.progress(min(max(probability, 0.0), 1.0))
+
+                    render_top_risk_signals(top_risk_signals)
+
+                    render_html(
+                        f"""
+                        <div class="status-row">
+                            <div class="status-card">
+                                <div class="status-value">{float(prediction_result["threshold_used"]):.2f}</div>
+                                <div class="status-label">Threshold</div>
+                            </div>
+                            <div class="status-card">
+                                <div class="status-value">{float(metrics.get("recall", 0)):.2f}</div>
+                                <div class="status-label">Recall</div>
+                            </div>
+                            <div class="status-card">
+                                <div class="status-value">{float(metrics.get("precision", 0)):.2f}</div>
+                                <div class="status-label">Precision</div>
+                            </div>
+                            <div class="status-card">
+                                <div class="status-value">{metrics.get("false_negatives", 0)}</div>
+                                <div class="status-label">False Negatives</div>
+                            </div>
+                        </div>
+                        """
+                    )
+
+                    render_html(
+                        f"""
+                        <div class="explanation">
+                            <b>Model Explanation</b><br>
+                            {escape(str(prediction_result["explanation"]))}
+                        </div>
+                        """
+                    )
+
+                    render_html(
+                        f"""
+                        <div class="recommendation">
+                            <b>Recommended Care Action</b><br>
+                            {escape(str(prediction_result["recommendation"]))}
+                        </div>
+                        """
+                    )
+
+                    render_html(
+                        f"""
+                        <div class="warning-box">
+                            <b>Disclaimer:</b> {escape(str(prediction_result["clinical_disclaimer"]))}
+                        </div>
+                        """
+                    )
+
+                except FileNotFoundError:
+                    st.error("Model not found. First run `python src/train.py` from the project root.")
+                except Exception as exc:
+                    st.error(f"Prediction failed: {exc}")
 
         else:
             render_html(
@@ -2364,9 +2515,6 @@ def main() -> None:
                 </div>
                 """
             )
-
-        with st.expander("View Patient JSON Sent to Model"):
-            st.json(patient_payload)
 
     with left:
         st.write("")
