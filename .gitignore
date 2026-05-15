@@ -40,3 +40,5 @@ mlruns/
 .venv/
 __pycache__/
 *.pyc
+
+reports/prediction_logs.csv
