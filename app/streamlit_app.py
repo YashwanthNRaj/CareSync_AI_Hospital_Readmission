@@ -1143,6 +1143,30 @@ def inject_css() -> None:
             color: var(--text);
             border: 1px solid rgba(252,128,25,0.40);
         }
+        .form-step-indicator {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 0.55rem;
+            margin: 0.85rem 0 1rem 0;
+        }
+
+        .form-step-pill {
+            border-radius: 999px;
+            padding: 0.65rem 1rem;
+            background: rgba(24,24,24,0.84);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            font-weight: 850;
+            text-align: center;
+            font-size: 0.92rem;
+        }
+
+        .form-step-pill-active {
+            background: rgba(252,128,25,0.16);
+            color: var(--text);
+            border: 1px solid rgba(252,128,25,0.40);
+        }
+
 
         label,
         .stSelectbox label,
@@ -2218,75 +2242,129 @@ def main() -> None:
 
         st.write("")
 
+        if "patient_form_step" not in st.session_state:
+            st.session_state.patient_form_step = 0
+
+        form_steps = ["Patient", "Admission", "Clinical", "Diabetes Care"]
+        current_step = int(st.session_state.patient_form_step)
+
+        race_options = ["Caucasian", "AfricanAmerican", "Asian", "Hispanic", "Other"]
+        gender_options = ["Female", "Male", "Unknown/Invalid"]
+        age_options = [
+            "[0-10)", "[10-20)", "[20-30)", "[30-40)", "[40-50)",
+            "[50-60)", "[60-70)", "[70-80)", "[80-90)", "[90-100)"
+        ]
+        a1c_options = ["None", "Norm", ">7", ">8"]
+        max_glu_options = ["None", "Norm", ">200", ">300"]
+        medicine_options = ["No", "Steady", "Up", "Down"]
+        change_options = ["No", "Ch"]
+        diabetes_med_options = ["No", "Yes"]
+
+        default_form_values = {
+            "patient_name": "Demo Patient",
+            "patient_id": "CG-001",
+            "care_coordinator": "Dr. Demo",
+            "race": sample.get("race", "Asian") if sample.get("race", "Asian") in race_options else "Asian",
+            "gender": sample.get("gender", "Male") if sample.get("gender", "Male") in gender_options else "Male",
+            "age": sample.get("age", "[40-50)") if sample.get("age", "[40-50)") in age_options else "[40-50)",
+            "admission_type_id": int(sample.get("admission_type_id", 1)),
+            "admission_source_id": int(sample.get("admission_source_id", 7)),
+            "discharge_disposition_id": int(sample.get("discharge_disposition_id", 1)),
+            "time_in_hospital": int(sample.get("time_in_hospital", 2)),
+            "num_lab_procedures": int(sample.get("num_lab_procedures", 5)),
+            "num_procedures": int(sample.get("num_procedures", 1)),
+            "num_medications": int(sample.get("num_medications", 18)),
+            "number_diagnoses": int(sample.get("number_diagnoses", 8)),
+            "number_outpatient": int(sample.get("number_outpatient", 1)),
+            "number_emergency": int(sample.get("number_emergency", 0)),
+            "number_inpatient": int(sample.get("number_inpatient", 2)),
+            "diag_1": str(sample.get("diag_1", "250.83")),
+            "diag_2": str(sample.get("diag_2", "401")),
+            "diag_3": str(sample.get("diag_3", "428")),
+            "A1Cresult": sample.get("A1Cresult", ">8") if sample.get("A1Cresult", ">8") in a1c_options else ">8",
+            "max_glu_serum": sample.get("max_glu_serum", ">200") if sample.get("max_glu_serum", ">200") in max_glu_options else ">200",
+            "metformin": sample.get("metformin", "Steady") if sample.get("metformin", "Steady") in medicine_options else "Steady",
+            "insulin": sample.get("insulin", "Up") if sample.get("insulin", "Up") in medicine_options else "Up",
+            "change": sample.get("change", "Ch") if sample.get("change", "Ch") in change_options else "Ch",
+            "diabetesMed": sample.get("diabetesMed", "Yes") if sample.get("diabetesMed", "Yes") in diabetes_med_options else "Yes",
+        }
+
+        for field_name, default_value in default_form_values.items():
+            if field_name not in st.session_state:
+                st.session_state[field_name] = default_value
+
+        for medication_name in ADVANCED_MEDICATION_FIELDS:
+            advanced_key = f"advanced_med_{medication_name}"
+            advanced_default = sample.get(medication_name, "No")
+            if advanced_default not in medicine_options:
+                advanced_default = "No"
+            if advanced_key not in st.session_state:
+                st.session_state[advanced_key] = advanced_default
+
+        step_pills_html = "".join(
+            f'<div class="form-step-pill {"form-step-pill-active" if index == current_step else ""}">{index + 1}. {step_name}</div>'
+            for index, step_name in enumerate(form_steps)
+        )
+        render_html(f'<div class="form-step-indicator">{step_pills_html}</div>')
+
+        submitted = False
         advanced_medication_profile: dict[str, str] = {}
 
         with st.form("patient_form"):
-            tab1, tab2, tab3, tab4 = st.tabs(["Patient", "Admission", "Clinical", "Diabetes Care"])
+            if current_step == 0:
+                st.markdown("### Patient")
+                patient_name = st.text_input("Patient Name", key="patient_name")
+                patient_id = st.text_input("Patient ID", key="patient_id")
+                care_coordinator = st.text_input("Doctor / Care Coordinator", key="care_coordinator")
 
-            with tab1:
-                patient_name = st.text_input("Patient Name", value="Demo Patient")
-                patient_id = st.text_input("Patient ID", value="CG-001")
-                care_coordinator = st.text_input("Doctor / Care Coordinator", value="Dr. Demo")
+                race = st.selectbox("Race", race_options, key="race")
+                gender = st.selectbox("Gender", gender_options, key="gender")
+                age = st.selectbox("Age", age_options, key="age")
 
-                race_options = ["Caucasian", "AfricanAmerican", "Asian", "Hispanic", "Other"]
-                gender_options = ["Female", "Male", "Unknown/Invalid"]
-                age_options = [
-                    "[0-10)", "[10-20)", "[20-30)", "[30-40)", "[40-50)",
-                    "[50-60)", "[60-70)", "[70-80)", "[80-90)", "[90-100)"
-                ]
-
-                race = st.selectbox("Race", race_options, index=get_select_index(race_options, sample.get("race", "Asian"), 2))
-                gender = st.selectbox("Gender", gender_options, index=get_select_index(gender_options, sample.get("gender", "Male"), 1))
-                age = st.selectbox("Age", age_options, index=get_select_index(age_options, sample.get("age", "[40-50)"), 4))
-
-            with tab2:
+            elif current_step == 1:
+                st.markdown("### Admission")
                 c1, c2 = st.columns(2)
 
                 with c1:
-                    admission_type_id = st.number_input("Admission Type ID", min_value=1, max_value=8, value=int(sample.get("admission_type_id", 1)))
-                    admission_source_id = st.number_input("Admission Source ID", min_value=1, max_value=25, value=int(sample.get("admission_source_id", 7)))
+                    admission_type_id = st.number_input("Admission Type ID", min_value=1, max_value=8, key="admission_type_id")
+                    admission_source_id = st.number_input("Admission Source ID", min_value=1, max_value=25, key="admission_source_id")
 
                 with c2:
-                    discharge_disposition_id = st.number_input("Discharge Disposition ID", min_value=1, max_value=30, value=int(sample.get("discharge_disposition_id", 1)))
-                    time_in_hospital = st.number_input("Time in hospital", min_value=1, max_value=30, value=int(sample.get("time_in_hospital", 2)))
+                    discharge_disposition_id = st.number_input("Discharge Disposition ID", min_value=1, max_value=30, key="discharge_disposition_id")
+                    time_in_hospital = st.number_input("Time in hospital", min_value=1, max_value=30, key="time_in_hospital")
 
-            with tab3:
+            elif current_step == 2:
+                st.markdown("### Clinical")
                 c1, c2 = st.columns(2)
 
                 with c1:
-                    num_lab_procedures = st.number_input("Number of lab procedures", min_value=0, max_value=150, value=int(sample.get("num_lab_procedures", 5)))
-                    num_procedures = st.number_input("Number of procedures", min_value=0, max_value=20, value=int(sample.get("num_procedures", 1)))
-                    num_medications = st.number_input("Number of medications", min_value=0, max_value=100, value=int(sample.get("num_medications", 18)))
-                    number_diagnoses = st.number_input("Number of diagnoses", min_value=1, max_value=30, value=int(sample.get("number_diagnoses", 8)))
+                    num_lab_procedures = st.number_input("Number of lab procedures", min_value=0, max_value=150, key="num_lab_procedures")
+                    num_procedures = st.number_input("Number of procedures", min_value=0, max_value=20, key="num_procedures")
+                    num_medications = st.number_input("Number of medications", min_value=0, max_value=100, key="num_medications")
+                    number_diagnoses = st.number_input("Number of diagnoses", min_value=1, max_value=30, key="number_diagnoses")
 
                 with c2:
-                    number_outpatient = st.number_input("Previous outpatient visits", min_value=0, max_value=50, value=int(sample.get("number_outpatient", 1)))
-                    number_emergency = st.number_input("Previous emergency visits", min_value=0, max_value=50, value=int(sample.get("number_emergency", 0)))
-                    number_inpatient = st.number_input("Previous inpatient visits", min_value=0, max_value=50, value=int(sample.get("number_inpatient", 2)))
+                    number_outpatient = st.number_input("Previous outpatient visits", min_value=0, max_value=50, key="number_outpatient")
+                    number_emergency = st.number_input("Previous emergency visits", min_value=0, max_value=50, key="number_emergency")
+                    number_inpatient = st.number_input("Previous inpatient visits", min_value=0, max_value=50, key="number_inpatient")
 
-            with tab4:
+            else:
+                st.markdown("### Diabetes Care")
                 c1, c2 = st.columns(2)
 
                 with c1:
-                    diag_1 = st.text_input("Diagnosis 1", value=str(sample.get("diag_1", "250.83")))
-                    diag_2 = st.text_input("Diagnosis 2", value=str(sample.get("diag_2", "401")))
-                    diag_3 = st.text_input("Diagnosis 3", value=str(sample.get("diag_3", "428")))
+                    diag_1 = st.text_input("Diagnosis 1", key="diag_1")
+                    diag_2 = st.text_input("Diagnosis 2", key="diag_2")
+                    diag_3 = st.text_input("Diagnosis 3", key="diag_3")
 
-                    a1c_options = ["None", "Norm", ">7", ">8"]
-                    max_glu_options = ["None", "Norm", ">200", ">300"]
-
-                    a1c = st.selectbox("A1C result", a1c_options, index=get_select_index(a1c_options, sample.get("A1Cresult", ">8"), 3))
-                    max_glu_serum = st.selectbox("Max glucose serum", max_glu_options, index=get_select_index(max_glu_options, sample.get("max_glu_serum", ">200"), 2))
+                    a1c = st.selectbox("A1C result", a1c_options, key="A1Cresult")
+                    max_glu_serum = st.selectbox("Max glucose serum", max_glu_options, key="max_glu_serum")
 
                 with c2:
-                    medicine_options = ["No", "Steady", "Up", "Down"]
-                    change_options = ["No", "Ch"]
-                    diabetes_med_options = ["No", "Yes"]
-
-                    metformin = st.selectbox("Metformin", medicine_options, index=get_select_index(medicine_options, sample.get("metformin", "Steady"), 1))
-                    insulin = st.selectbox("Insulin", medicine_options, index=get_select_index(medicine_options, sample.get("insulin", "Up"), 2))
-                    change = st.selectbox("Medication change", change_options, index=get_select_index(change_options, sample.get("change", "Ch"), 1))
-                    diabetes_med = st.selectbox("Diabetes medication", diabetes_med_options, index=get_select_index(diabetes_med_options, sample.get("diabetesMed", "Yes"), 1))
+                    metformin = st.selectbox("Metformin", medicine_options, key="metformin")
+                    insulin = st.selectbox("Insulin", medicine_options, key="insulin")
+                    change = st.selectbox("Medication change", change_options, key="change")
+                    diabetes_med = st.selectbox("Diabetes medication", diabetes_med_options, key="diabetesMed")
 
                 with st.expander("Advanced Medication Profile", expanded=False):
                     render_html(
@@ -2306,40 +2384,62 @@ def main() -> None:
                             advanced_medication_profile[medication_name] = st.selectbox(
                                 medication_name,
                                 medicine_options,
-                                index=get_select_index(
-                                    medicine_options,
-                                    sample.get(medication_name, "No"),
-                                    0,
-                                ),
                                 key=f"advanced_med_{medication_name}",
                             )
 
-            submitted = st.form_submit_button("Generate Readmission Risk Score")
+            nav_col1, nav_col2 = st.columns(2)
+
+            with nav_col1:
+                previous_clicked = st.form_submit_button("Previous")
+
+            with nav_col2:
+                next_label = "Next" if current_step < len(form_steps) - 1 else "Generate Readmission Risk Score"
+                next_clicked = st.form_submit_button(next_label)
+
+        if previous_clicked:
+            st.session_state.patient_form_step = max(0, current_step - 1)
+            st.rerun()
+
+        if next_clicked:
+            if current_step < len(form_steps) - 1:
+                st.session_state.patient_form_step = min(len(form_steps) - 1, current_step + 1)
+                st.rerun()
+            else:
+                submitted = True
+
+    advanced_medication_profile = {
+        medication_name: st.session_state.get(f"advanced_med_{medication_name}", "No")
+        for medication_name in ADVANCED_MEDICATION_FIELDS
+    }
+
+    patient_name = st.session_state.get("patient_name", "Demo Patient")
+    patient_id = st.session_state.get("patient_id", "CG-001")
+    care_coordinator = st.session_state.get("care_coordinator", "Dr. Demo")
 
     patient_payload = {
-        "race": race,
-        "gender": gender,
-        "age": age,
-        "admission_type_id": admission_type_id,
-        "discharge_disposition_id": discharge_disposition_id,
-        "admission_source_id": admission_source_id,
-        "time_in_hospital": time_in_hospital,
-        "num_lab_procedures": num_lab_procedures,
-        "num_procedures": num_procedures,
-        "num_medications": num_medications,
-        "number_outpatient": number_outpatient,
-        "number_emergency": number_emergency,
-        "number_inpatient": number_inpatient,
-        "diag_1": diag_1,
-        "diag_2": diag_2,
-        "diag_3": diag_3,
-        "number_diagnoses": number_diagnoses,
-        "max_glu_serum": max_glu_serum,
-        "A1Cresult": a1c,
-        "metformin": metformin,
-        "insulin": insulin,
-        "change": change,
-        "diabetesMed": diabetes_med,
+        "race": st.session_state.get("race", "Asian"),
+        "gender": st.session_state.get("gender", "Male"),
+        "age": st.session_state.get("age", "[40-50)"),
+        "admission_type_id": st.session_state.get("admission_type_id", 1),
+        "discharge_disposition_id": st.session_state.get("discharge_disposition_id", 1),
+        "admission_source_id": st.session_state.get("admission_source_id", 7),
+        "time_in_hospital": st.session_state.get("time_in_hospital", 2),
+        "num_lab_procedures": st.session_state.get("num_lab_procedures", 5),
+        "num_procedures": st.session_state.get("num_procedures", 1),
+        "num_medications": st.session_state.get("num_medications", 18),
+        "number_outpatient": st.session_state.get("number_outpatient", 1),
+        "number_emergency": st.session_state.get("number_emergency", 0),
+        "number_inpatient": st.session_state.get("number_inpatient", 2),
+        "diag_1": st.session_state.get("diag_1", "250.83"),
+        "diag_2": st.session_state.get("diag_2", "401"),
+        "diag_3": st.session_state.get("diag_3", "428"),
+        "number_diagnoses": st.session_state.get("number_diagnoses", 8),
+        "max_glu_serum": st.session_state.get("max_glu_serum", ">200"),
+        "A1Cresult": st.session_state.get("A1Cresult", ">8"),
+        "metformin": st.session_state.get("metformin", "Steady"),
+        "insulin": st.session_state.get("insulin", "Up"),
+        "change": st.session_state.get("change", "Ch"),
+        "diabetesMed": st.session_state.get("diabetesMed", "Yes"),
         **advanced_medication_profile,
     }
 
