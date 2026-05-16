@@ -797,7 +797,6 @@ def build_patient_risk_report_pdf(
 
     rect(margin_x, y - 78, page_width - (margin_x * 2), 86, fill=(0.96, 0.96, 0.96))
     key_value("Report Timestamp", report_timestamp)
-    key_value("Model Version", model_version)
     key_value("Patient ID", patient_id)
     key_value("Patient Name", patient_name)
     key_value("Care Coordinator", care_coordinator)
@@ -807,6 +806,10 @@ def build_patient_risk_report_pdf(
     key_value("Risk Score", f"{risk_score_percent:.2f}%")
     key_value("Risk Level", risk_level)
     key_value("Prediction", prediction)
+
+    section("Patient Input Summary")
+    for key, value in patient_payload.items():
+        key_value(key, value)
 
     section("Top Risk Signals")
     for signal in top_risk_signals:
@@ -818,18 +821,10 @@ def build_patient_risk_report_pdf(
     key_value("Care Focus", condition_summary["care_focus"])
     key_value("Suggested Follow-up", condition_summary["follow_up"])
 
-    section("Model Explanation")
-    paragraph(explanation, max_chars=92)
-
+    
     section("Recommended Care Action")
     paragraph(recommendation, max_chars=92)
 
-    section("Clinical Disclaimer")
-    paragraph(disclaimer, max_chars=92)
-
-    section("Patient Input Summary")
-    for key, value in patient_payload.items():
-        key_value(key, value)
 
     current.append(
         f"BT /F1 8 Tf 0.45 0.45 0.45 rg {margin_x:.2f} 34 Td "
