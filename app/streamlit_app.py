@@ -797,6 +797,7 @@ def build_patient_risk_report_pdf(
 
     rect(margin_x, y - 78, page_width - (margin_x * 2), 86, fill=(0.96, 0.96, 0.96))
     key_value("Report Timestamp", report_timestamp)
+    key_value("Model Version", model_version)
     key_value("Patient ID", patient_id)
     key_value("Patient Name", patient_name)
     key_value("Care Coordinator", care_coordinator)
@@ -806,10 +807,6 @@ def build_patient_risk_report_pdf(
     key_value("Risk Score", f"{risk_score_percent:.2f}%")
     key_value("Risk Level", risk_level)
     key_value("Prediction", prediction)
-
-    section("Patient Input Summary")
-    for key, value in patient_payload.items():
-        key_value(key, value)
 
     section("Top Risk Signals")
     for signal in top_risk_signals:
@@ -821,11 +818,18 @@ def build_patient_risk_report_pdf(
     key_value("Care Focus", condition_summary["care_focus"])
     key_value("Suggested Follow-up", condition_summary["follow_up"])
 
+    section("Model Explanation")
+    paragraph(explanation, max_chars=92)
 
     section("Recommended Care Action")
     paragraph(recommendation, max_chars=92)
 
+    section("Clinical Disclaimer")
+    paragraph(disclaimer, max_chars=92)
 
+    section("Patient Input Summary")
+    for key, value in patient_payload.items():
+        key_value(key, value)
 
     current.append(
         f"BT /F1 8 Tf 0.45 0.45 0.45 rg {margin_x:.2f} 34 Td "
@@ -1179,7 +1183,7 @@ def inject_css() -> None:
             background:
                 linear-gradient(135deg, rgba(24,24,24,0.92), rgba(5,5,5,0.84)),
                 radial-gradient(circle at top right, rgba(252,128,25,0.10), transparent 45%);
-            border: 1px solid rgba(252,128,25,0.24);
+            border: 1px solid rgba(252,128,25,0.11);
             box-shadow:
                 0 16px 44px rgba(0,0,0,0.38),
                 inset 0 1px 0 rgba(255,255,255,0.06);
@@ -1864,7 +1868,7 @@ def inject_css() -> None:
             background:
                 linear-gradient(135deg, rgba(24,24,24,0.92), rgba(5,5,5,0.84)),
                 radial-gradient(circle at top right, rgba(252,128,25,0.12), transparent 44%);
-            border: 1px solid rgba(252,128,25,0.24);
+            border: 1px solid rgba(252,128,25,0.11);
             box-shadow: 0 26px 76px rgba(0,0,0,0.42);
         }
 
@@ -2133,32 +2137,97 @@ def landing_page() -> None:
 
                 .stage {
                     position: relative;
-                    min-height: 610px;
+                    min-height: 760px;
                     display: grid;
                     place-items: center;
-                    padding: 44px 26px 28px;
+                    padding: 46px 34px 120px;
                     isolation: isolate;
+                    overflow: hidden;
                     background:
-                        radial-gradient(circle at 15% 12%, rgba(252,128,25,0.22), transparent 30%),
-                        radial-gradient(circle at 85% 18%, rgba(255,159,69,0.12), transparent 30%),
+                        radial-gradient(circle at 15% 12%, rgba(252,128,25,0.24), transparent 30%),
+                        radial-gradient(circle at 85% 18%, rgba(255,159,69,0.14), transparent 30%),
                         radial-gradient(circle at 50% 100%, rgba(252,128,25,0.08), transparent 36%),
                         linear-gradient(135deg, #0B0B0B 0%, #050505 48%, #111111 100%);
                 }
 
+                .stage::before {
+                    content: "";
+                    position: absolute;
+                    inset: -42%;
+                    background:
+                        linear-gradient(rgba(255,159,69,0.055) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(255,159,69,0.055) 1px, transparent 1px);
+                    background-size: 46px 46px;
+                    transform: perspective(780px) rotateX(63deg) translateY(120px);
+                    transform-origin: center bottom;
+                    animation: careGridMove 15s linear infinite;
+                    opacity: 0.65;
+                    z-index: -6;
+                }
+
+                .stage::after {
+                    content: "";
+                    position: absolute;
+                    inset: -18%;
+                    background:
+                        conic-gradient(from 210deg at 50% 52%, transparent 0deg, rgba(252,128,25,0.13) 36deg, transparent 82deg, rgba(255,159,69,0.10) 150deg, transparent 218deg, rgba(252,128,25,0.10) 286deg, transparent 360deg);
+                    filter: blur(24px);
+                    animation: careAuraSpin 26s linear infinite;
+                    opacity: 0.62;
+                    z-index: -5;
+                }
+
+                .care-orb {
+                    position: absolute;
+                    width: var(--size);
+                    height: var(--size);
+                    left: var(--x);
+                    top: var(--y);
+                    border-radius: 999px;
+                    background: radial-gradient(circle, rgba(255,159,69,0.88), rgba(252,128,25,0.18) 46%, transparent 72%);
+                    opacity: 0.36;
+                    animation: careOrbFloat var(--duration) ease-in-out infinite alternate;
+                    z-index: -3;
+                }
+
+                .care-beam {
+                    position: absolute;
+                    inset: 0;
+                    background: linear-gradient(112deg, transparent 0%, transparent 42%, rgba(255,159,69,0.13) 48%, rgba(255,255,255,0.10) 50%, rgba(252,128,25,0.11) 54%, transparent 63%, transparent 100%);
+                    transform: translateX(-125%);
+                    animation: careLightSweep 6.6s ease-in-out infinite;
+                    mix-blend-mode: screen;
+                    pointer-events: none;
+                    z-index: 4;
+                }
+
+                .care-particles {
+                    position: absolute;
+                    inset: 0;
+                    background-image:
+                        radial-gradient(circle at 20% 40%, rgba(255,255,255,0.055) 0 1px, transparent 1px),
+                        radial-gradient(circle at 80% 20%, rgba(252,128,25,0.075) 0 1px, transparent 1px),
+                        radial-gradient(circle at 60% 70%, rgba(255,159,69,0.065) 0 1px, transparent 1px);
+                    background-size: 120px 120px, 92px 92px, 140px 140px;
+                    opacity: 0.23;
+                    animation: careParticleDrift 18s linear infinite;
+                    z-index: -4;
+                }
+
                 .hero-card {
                     position: relative;
-                    width: min(1010px, 100%);
-                    padding: 38px;
+                    width: min(1080px, calc(100% - 20px));
+                    padding: 36px 42px 128px;
                     border-radius: 38px;
                     background:
-                        linear-gradient(135deg, rgba(24,24,24,0.92), rgba(5,5,5,0.80)),
-                        radial-gradient(circle at top left, rgba(252,128,25,0.16), transparent 32%),
-                        radial-gradient(circle at bottom right, rgba(255,159,69,0.10), transparent 32%);
-                    border: 1px solid rgba(252,128,25,0.25);
+                        linear-gradient(135deg, rgba(24,24,24,0.92), rgba(5,5,5,0.82)),
+                        radial-gradient(circle at top left, rgba(252,128,25,0.14), transparent 32%),
+                        radial-gradient(circle at bottom right, rgba(255,159,69,0.08), transparent 32%);
+                    border: 0;
                     box-shadow:
                         0 38px 130px rgba(0,0,0,0.62),
-                        0 0 76px rgba(252,128,25,0.14),
-                        inset 0 1px 0 rgba(255,255,255,0.10);
+                        0 0 76px rgba(252,128,25,0.10),
+                        inset 0 1px 0 rgba(255,255,255,0.07);
                     backdrop-filter: blur(24px);
                     overflow: hidden;
                 }
@@ -2227,7 +2296,7 @@ def landing_page() -> None:
                         linear-gradient(rgba(252,128,25,0.055) 1px, transparent 1px),
                         linear-gradient(90deg, rgba(252,128,25,0.055) 1px, transparent 1px);
                     background-size: auto, 38px 38px, 38px 38px;
-                    border: 1px solid rgba(252,128,25,0.24);
+                    border: 1px solid rgba(252,128,25,0.11);
                     box-shadow:
                         inset 0 1px 0 rgba(255,255,255,0.08),
                         0 20px 58px rgba(0,0,0,0.38);
@@ -2288,51 +2357,204 @@ def landing_page() -> None:
                 }
 
                 .highlights {
-                    display: grid;
-                    gap: 12px;
+                    position: relative;
+                    min-height: 280px;
+                    border-radius: 30px;
+                    overflow: hidden;
+                    border: 1px solid rgba(252,128,25,0.11);
+                    background:
+                        radial-gradient(circle at 50% 44%, rgba(252,128,25,0.16), transparent 28%),
+                        radial-gradient(circle at 16% 20%, rgba(255,159,69,0.09), transparent 20%),
+                        radial-gradient(circle at 82% 78%, rgba(255,159,69,0.08), transparent 24%),
+                        linear-gradient(135deg, rgba(14,14,14,0.97), rgba(24,24,24,0.84));
+                    box-shadow:
+                        inset 0 1px 0 rgba(255,255,255,0.08),
+                        0 18px 60px rgba(0,0,0,0.38),
+                        0 0 0 1px rgba(252,128,25,0.08);
                 }
 
-                .mini-card {
-                    display: flex;
+                .highlights::before {
+                    content: "";
+                    position: absolute;
+                    inset: 0;
+                    background:
+                        linear-gradient(rgba(255,255,255,0.022) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px);
+                    background-size: 38px 38px;
+                    opacity: 0.30;
+                    pointer-events: none;
+                }
+
+                .highlights::after {
+                    content: "";
+                    position: absolute;
+                    inset: -35% 48% auto -12%;
+                    height: 150%;
+                    background: linear-gradient(115deg, transparent 0%, rgba(255,255,255,0.055) 45%, transparent 70%);
+                    transform: rotate(8deg);
+                    animation: pipelineSheen 6.2s ease-in-out infinite;
+                    pointer-events: none;
+                }
+
+                .pipeline-top-badge {
+                    position: absolute;
+                    top: 14px;
+                    left: 16px;
+                    z-index: 4;
+                    display: inline-flex;
                     align-items: center;
-                    gap: 12px;
-                    padding: 17px 18px;
-                    min-height: 52px;
-                    border-radius: 22px;
-                    background: rgba(24,24,24,0.86);
-                    border: 1px solid rgba(255,255,255,0.10);
+                    gap: 8px;
+                    padding: 8px 12px;
+                    border-radius: 999px;
+                    background: rgba(12,12,12,0.78);
+                    border: 1px solid rgba(252,128,25,0.26);
+                    color: #FFE5CF;
+                    font-size: 11px;
+                    font-weight: 850;
+                    letter-spacing: 0.08em;
+                    text-transform: uppercase;
+                    box-shadow: 0 8px 22px rgba(0,0,0,0.28);
+                    backdrop-filter: blur(10px);
+                }
+
+                .pipeline-dot {
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 50%;
+                    background: linear-gradient(135deg, #FFB066, #FC8019);
+                    box-shadow: 0 0 14px rgba(252,128,25,0.75);
+                }
+
+                .pipeline-svg {
+                    position: absolute;
+                    inset: 0;
+                    width: 100%;
+                    height: 100%;
+                    padding: 12px;
+                    z-index: 2;
+                }
+
+                .pipe-track {
+                    fill: none;
+                    stroke: rgba(255,175,94,0.20);
+                    stroke-width: 4.5;
+                    stroke-linecap: round;
+                    stroke-linejoin: round;
+                }
+
+                .pipe-flow {
+                    fill: none;
+                    stroke: #FF9F45;
+                    stroke-width: 4.5;
+                    stroke-linecap: round;
+                    stroke-linejoin: round;
+                    stroke-dasharray: 15 14;
+                    animation: pipeDash 1.3s linear infinite;
+                    filter: drop-shadow(0 0 9px rgba(255,159,69,0.75));
+                }
+
+                .pipe-core-ring {
+                    fill: rgba(252,128,25,0.06);
+                    stroke: rgba(255,159,69,0.38);
+                    stroke-width: 2;
+                    transform-origin: center;
+                    animation: aiCorePulse 2.6s ease-in-out infinite;
+                    filter: drop-shadow(0 0 13px rgba(252,128,25,0.20));
+                }
+
+                .pipe-core {
+                    fill: rgba(18,18,18,0.97);
+                    stroke: rgba(255,159,69,0.94);
+                    stroke-width: 2.4;
+                    filter: drop-shadow(0 0 16px rgba(252,128,25,0.28));
+                }
+
+                .pipe-node {
+                    fill: rgba(14,14,14,0.97);
+                    stroke: rgba(255,165,82,0.92);
+                    stroke-width: 2.1;
+                    filter: drop-shadow(0 0 10px rgba(252,128,25,0.25));
+                }
+
+                .pipe-node-soft {
+                    animation: nodeGlow 2.5s ease-in-out infinite alternate;
+                }
+
+                .pipe-text-main {
+                    fill: #FFFFFF;
+                    font-size: 14px;
+                    font-weight: 950;
+                    letter-spacing: 0.01em;
+                    text-anchor: middle;
+                    dominant-baseline: middle;
+                }
+
+                .pipe-text-sub {
+                    fill: #D9D9D9;
+                    font-size: 9.5px;
+                    font-weight: 780;
+                    text-anchor: middle;
+                    dominant-baseline: middle;
+                }
+
+                .pipeline-caption {
+                    position: absolute;
+                    left: 18px;
+                    right: 18px;
+                    bottom: 15px;
+                    z-index: 4;
+                    display: flex;
+                    justify-content: center;
+                }
+
+                .pipeline-caption-pill {
+                    padding: 9px 15px;
+                    border-radius: 999px;
+                    background: rgba(10,10,10,0.78);
+                    border: 1px solid rgba(252,128,25,0.28);
                     color: #FFFFFF;
+                    font-size: 12.2px;
+                    font-weight: 860;
+                    letter-spacing: 0.02em;
                     box-shadow:
                         inset 0 1px 0 rgba(255,255,255,0.06),
-                        0 16px 44px rgba(0,0,0,0.30);
-                    transition: transform 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
+                        0 10px 26px rgba(0,0,0,0.28);
+                    backdrop-filter: blur(10px);
                 }
 
-                .mini-card:hover {
-                    transform: translateY(-4px);
-                    border-color: rgba(255,159,69,0.45);
-                    box-shadow:
-                        0 24px 64px rgba(0,0,0,0.45),
-                        0 0 30px rgba(252,128,25,0.14);
+
+                .pipe-ml-title {
+                    font-size: 20px !important;
+                    font-weight: 950 !important;
                 }
 
-                .mini-icon {
-                    width: 34px;
-                    height: 34px;
-                    border-radius: 12px;
-                    display: grid;
-                    place-items: center;
-                    color: #050505;
-                    background: linear-gradient(135deg, #FF9F45, #FC8019);
-                    font-size: 16px;
-                    font-weight: 950;
-                    box-shadow: 0 0 26px rgba(252,128,25,0.20);
+                .pipe-ml-sub {
+                    font-size: 10.5px !important;
+                    font-weight: 820 !important;
                 }
 
-                .mini-text {
-                    font-size: 15px;
-                    font-weight: 850;
-                    color: #FFFFFF;
+                .pipe-node-explain {
+                    filter: drop-shadow(0 0 14px rgba(252,128,25,0.34));
+                }
+
+                @keyframes pipeDash {
+                    to { stroke-dashoffset: -29; }
+                }
+
+                @keyframes aiCorePulse {
+                    0%, 100% { transform: scale(1); opacity: 0.72; }
+                    50% { transform: scale(1.025); opacity: 1; }
+                }
+
+                @keyframes nodeGlow {
+                    0% { filter: drop-shadow(0 0 7px rgba(252,128,25,0.20)); }
+                    100% { filter: drop-shadow(0 0 16px rgba(252,128,25,0.46)); }
+                }
+
+                @keyframes pipelineSheen {
+                    0%, 100% { transform: translateX(-18%) rotate(8deg); opacity: 0; }
+                    18%, 68% { opacity: 1; }
+                    100% { transform: translateX(38%) rotate(8deg); opacity: 0; }
                 }
 
                 @keyframes ecgTrace {
@@ -2349,10 +2571,36 @@ def landing_page() -> None:
                     100% { left: 100%; opacity: 0; }
                 }
 
+                @keyframes careGridMove {
+                    0% { background-position: 0 0, 0 0; }
+                    100% { background-position: 0 460px, 460px 0; }
+                }
+
+                @keyframes careAuraSpin {
+                    from { transform: rotate(0deg) scale(1.08); }
+                    to { transform: rotate(360deg) scale(1.08); }
+                }
+
+                @keyframes careOrbFloat {
+                    0% { transform: translate3d(-8px, 10px, 0) scale(0.96); }
+                    100% { transform: translate3d(14px, -18px, 0) scale(1.10); }
+                }
+
+                @keyframes careLightSweep {
+                    0%, 54% { transform: translateX(-125%); opacity: 0; }
+                    64% { opacity: 1; }
+                    100% { transform: translateX(125%); opacity: 0; }
+                }
+
+                @keyframes careParticleDrift {
+                    0% { background-position: 0 0, 0 0, 0 0; }
+                    100% { background-position: 120px 80px, -92px 120px, 140px -100px; }
+                }
+
                 @media (max-width: 900px) {
                     .stage {
                         min-height: auto;
-                        padding: 26px 16px;
+                        padding: 30px 16px 112px;
                     }
 
                     .hero-card {
@@ -2376,6 +2624,11 @@ def landing_page() -> None:
         </head>
         <body>
             <main class="stage">
+                <div class="care-particles"></div>
+                <div class="care-beam"></div>
+                <div class="care-orb" style="--x:8%;--y:18%;--size:150px;--duration:6.8s;"></div>
+                <div class="care-orb" style="--x:80%;--y:9%;--size:120px;--duration:7.6s;"></div>
+                <div class="care-orb" style="--x:55%;--y:74%;--size:175px;--duration:8.4s;"></div>
                 <section class="hero-card">
                     <div class="brand-row">
                         <div class="brand-chip">AI Healthcare MLOps</div>
@@ -2398,17 +2651,45 @@ def landing_page() -> None:
                         </div>
 
                         <div class="highlights">
-                            <div class="mini-card">
-                                <div class="mini-icon">R</div>
-                                <div class="mini-text">Recall-Focused ML</div>
-                            </div>
-                            <div class="mini-card">
-                                <div class="mini-icon">M</div>
-                                <div class="mini-text">MLOps Pipeline</div>
-                            </div>
-                            <div class="mini-card">
-                                <div class="mini-icon">C</div>
-                                <div class="mini-text">Clinical Decision Support</div>
+                            <div class="pipeline-top-badge"><span class="pipeline-dot"></span> CareGuard AI Workflow</div>
+                            <svg class="pipeline-svg" viewBox="0 0 640 300" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+                                <!-- Routed workflow: DATA → PREPROCESS → ML → EXPLAIN → CARE -->
+                                <path class="pipe-track" d="M82 158 C128 118, 166 104, 206 104 C248 104, 282 132, 330 176 C360 204, 390 221, 456 221 C505 221, 542 176, 565 132" />
+                                <path class="pipe-flow" d="M82 158 C128 118, 166 104, 206 104 C248 104, 282 132, 330 176 C360 204, 390 221, 456 221 C505 221, 542 176, 565 132" />
+
+                                <!-- Bigger ML Risk Model core with circles only around ML -->
+                                <circle class="pipe-core-ring" cx="372" cy="198" r="64"></circle>
+                                <circle class="pipe-core-ring" cx="372" cy="198" r="46" style="animation-delay:.35s;"></circle>
+                                <circle class="pipe-core" cx="372" cy="198" r="38"></circle>
+                                <text class="pipe-text-main pipe-ml-title" x="372" y="190">ML</text>
+                                <text class="pipe-text-sub pipe-ml-sub" x="372" y="214">Risk Model</text>
+
+                                <g>
+                                    <rect class="pipe-node pipe-node-soft" x="35" y="130" width="92" height="72" rx="21"></rect>
+                                    <text class="pipe-text-main" x="81" y="158">DATA</text>
+                                    <text class="pipe-text-sub" x="81" y="179">Patient Inputs</text>
+                                </g>
+
+                                <g>
+                                    <rect class="pipe-node pipe-node-soft" x="172" y="56" width="122" height="72" rx="21"></rect>
+                                    <text class="pipe-text-main" x="233" y="84">PREPROCESS</text>
+                                    <text class="pipe-text-sub" x="233" y="105">Clean + Encode</text>
+                                </g>
+
+                                <g>
+                                    <rect class="pipe-node pipe-node-explain" x="456" y="184" width="124" height="78" rx="21"></rect>
+                                    <text class="pipe-text-main" x="518" y="213">EXPLAIN</text>
+                                    <text class="pipe-text-sub" x="518" y="237">Risk Signals</text>
+                                </g>
+
+                                <g>
+                                    <rect class="pipe-node pipe-node-soft" x="520" y="86" width="90" height="72" rx="21"></rect>
+                                    <text class="pipe-text-main" x="565" y="114">CARE</text>
+                                    <text class="pipe-text-sub" x="565" y="135">Report + Plan</text>
+                                </g>
+                            </svg>
+                            <div class="pipeline-caption">
+                                <div class="pipeline-caption-pill">Patient data → AI risk score → explainable care decision</div>
                             </div>
                         </div>
                     </div>
@@ -2419,9 +2700,91 @@ def landing_page() -> None:
         """
     )
 
-    components.html(landing_html, height=640, scrolling=False)
+    components.html(landing_html, height=770, scrolling=False)
 
-    c1, c2, c3 = st.columns([1, 1.05, 1])
+    st.markdown(
+        """
+        <style>
+        /* Clean landing page finish: no giant empty strip and button sits inside the card area */
+        .main .block-container {
+            padding-top: 0 !important;
+            padding-bottom: 0.2rem !important;
+        }
+
+        div[data-testid="stVerticalBlock"] > div:has(iframe) {
+            margin-bottom: 0 !important;
+            padding-bottom: 0 !important;
+        }
+
+        iframe {
+            display: block !important;
+            border: 0 !important;
+        }
+
+        div[data-testid="stHorizontalBlock"]:has(button[kind="secondary"]) {
+            max-width: 1080px;
+            margin: -92px auto 28px auto !important;
+            position: relative;
+            z-index: 60;
+            padding: 0 42px !important;
+            background: transparent !important;
+            border: 0 !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            overflow: visible !important;
+        }
+
+        div[data-testid="stHorizontalBlock"]:has(button[kind="secondary"]) .stButton {
+            display: flex;
+            justify-content: center;
+            background: transparent !important;
+            border: 0 !important;
+            box-shadow: none !important;
+        }
+
+        div[data-testid="stHorizontalBlock"]:has(button[kind="secondary"]) .stButton > button {
+            max-width: 330px !important;
+            min-height: 52px !important;
+            border-radius: 999px !important;
+            font-size: 1.05rem !important;
+            font-weight: 950 !important;
+            color: #050505 !important;
+            background: linear-gradient(90deg, #FFB15C, #FC8019, #D96B12) !important;
+            box-shadow:
+                0 20px 58px rgba(252,128,25,0.34),
+                0 0 0 1px rgba(255,255,255,0.18) inset !important;
+            border: 0 !important;
+            margin: 0 !important;
+        }
+
+        div[data-testid="stHorizontalBlock"]:has(button[kind="secondary"]) .stButton > button:hover {
+            transform: translateY(-2px) scale(1.012);
+            filter: brightness(1.08);
+            box-shadow:
+                0 28px 76px rgba(252,128,25,0.46),
+                0 0 0 1px rgba(255,255,255,0.22) inset !important;
+        }
+
+
+        body, .stApp {
+            overflow-x: hidden !important;
+        }
+
+        div[data-testid="stVerticalBlock"] {
+            gap: 0 !important;
+        }
+
+        /* Hide the Streamlit top header area on the launch screen */
+        header[data-testid="stHeader"] {
+            background: transparent !important;
+            height: 0 !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    c1, c2, c3 = st.columns([1.2, 1.05, 1.2])
     with c2:
         if st.button("Launch Dashboard", use_container_width=True):
             st.session_state.app_started = True
@@ -3248,3 +3611,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
