@@ -2,7 +2,7 @@
 
 ## Slide 1: Title
 
-**CareGuard AI: Hospital Readmission Risk Scorer**
+**CareSync AI: Hospital Readmission Risk Scorer**
 
 A recall-focused MLOps system for predicting 30-day readmission risk in diabetic patients.
 
@@ -112,4 +112,4 @@ MLflow is used to log:
 
 ## Slide 16: Conclusion
 
-CareGuard AI demonstrates a complete clinical AI MLOps pipeline that focuses on the metric that matters most for this use case: catching high-risk patients by improving recall and reducing false negatives.
+CareSync AI demonstrates a complete clinical AI MLOps pipeline that focuses on the metric that matters most for this use case: catching high-risk patients by improving recall and reducing false negatives.

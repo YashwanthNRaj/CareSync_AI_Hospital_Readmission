@@ -1,8 +1,8 @@
-# CareGuard AI: Hospital Readmission Risk Scorer - Project Report
+# CareSync AI: Hospital Readmission Risk Scorer - Project Report
 
 ## Abstract
 
-CareGuard AI is an end-to-end MLOps project that predicts whether a diabetic patient is likely to be readmitted within 30 days of hospital discharge. The project uses the Diabetes 130-US Hospitals dataset and focuses on recall because false negatives can be clinically harmful. The system includes data preprocessing, missing value handling, feature engineering, model training, MLflow tracking, threshold tuning, FastAPI deployment, Streamlit dashboarding, documentation, Docker support, and tests.
+CareSync AI is an end-to-end MLOps project that predicts whether a diabetic patient is likely to be readmitted within 30 days of hospital discharge. The project uses the Diabetes 130-US Hospitals dataset and focuses on recall because false negatives can be clinically harmful. The system includes data preprocessing, missing value handling, feature engineering, model training, MLflow tracking, threshold tuning, FastAPI deployment, Streamlit dashboarding, documentation, Docker support, and tests.
 
 ## Introduction
 
@@ -160,4 +160,4 @@ Healthcare AI systems can influence care access and prioritization. Any real cli
 
 ## Clinical Disclaimer
 
-CareGuard AI is for educational and hackathon demonstration only. It is not a medical device and must not be used as a substitute for professional clinical judgment.
+CareSync AI is for educational and hackathon demonstration only. It is not a medical device and must not be used as a substitute for professional clinical judgment.

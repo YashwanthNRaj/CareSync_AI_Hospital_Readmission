@@ -15,7 +15,7 @@ client = TestClient(app)
 def test_root_endpoint():
     response = client.get("/")
     assert response.status_code == 200
-    assert "CareGuard AI" in response.json()["message"]
+    assert "CareSync AI" in response.json()["message"]
 
 
 def test_health_endpoint():

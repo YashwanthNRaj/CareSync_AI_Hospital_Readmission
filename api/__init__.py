@@ -1,1 +1,1 @@
-"""FastAPI package for CareGuard AI."""
+"""FastAPI package for CareSync AI."""

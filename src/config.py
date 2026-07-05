@@ -8,7 +8,7 @@ RAW_DATA_PATH = DATA_DIR / "raw" / "diabetic_data.csv"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
 
 MODEL_DIR = PROJECT_ROOT / "models"
-MODEL_PATH = MODEL_DIR / "careguard_readmission_model.joblib"
+MODEL_PATH = MODEL_DIR / "caresync_readmission_model.joblib"
 THRESHOLD_PATH = MODEL_DIR / "threshold.json"
 
 REPORTS_DIR = PROJECT_ROOT / "reports"

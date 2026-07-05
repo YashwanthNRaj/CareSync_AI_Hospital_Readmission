@@ -30,7 +30,7 @@ Returns basic API information.
 
 ```json
 {
-  "message": "CareGuard AI Hospital Readmission Risk Scorer API",
+  "message": "CareSync AI Hospital Readmission Risk Scorer API",
   "docs": "/docs",
   "clinical_disclaimer": "..."
 }
@@ -182,7 +182,7 @@ If the model is not trained yet:
 
 ```json
 {
-  "detail": "Trained model was not found at models/careguard_readmission_model.joblib. Run `python src/train.py` before prediction."
+  "detail": "Trained model was not found at models/caresync_readmission_model.joblib. Run `python src/train.py` before prediction."
 }
 ```
 

@@ -1,6 +1,6 @@
-# CareGuard AI: Hospital Readmission Risk Scorer
+# CareSync AI: Hospital Readmission Risk Scorer
 
-CareGuard AI is a complete end-to-end MLOps project that predicts whether a diabetic patient is likely to be readmitted within 30 days after hospital discharge.
+CareSync AI is a complete end-to-end MLOps project that predicts whether a diabetic patient is likely to be readmitted within 30 days after hospital discharge.
 
 This project is designed for a hackathon-style clinical AI mission. It includes data preprocessing, feature engineering, model training, MLflow experiment tracking, recall-focused threshold tuning, saved model artifacts, a FastAPI risk scoring service, a Streamlit demo dashboard, tests, Docker support, documentation, and presentation content.
 
@@ -31,7 +31,7 @@ In this problem, a false negative means the model predicts that a patient is low
 
 That is more dangerous than a false positive because a high-risk patient may miss extra care, follow-up, medication review, and discharge counseling.
 
-Because of this, CareGuard AI prioritizes:
+Because of this, CareSync AI prioritizes:
 
 - Recall / sensitivity for the positive class
 - Reduction of false negatives
@@ -105,7 +105,7 @@ Risk Explanation + Care Recommendation
 ## Folder Structure
 
 ```text
-CareGuard_AI_Hospital_Readmission/
+CareSync_AI_Hospital_Readmission/
 ├── README.md
 ├── requirements.txt
 ├── .gitignore
@@ -152,7 +152,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 Download the dataset from UCI and place it here:
 
 ```text
-CareGuard_AI_Hospital_Readmission/data/raw/diabetic_data.csv
+CareSync_AI_Hospital_Readmission/data/raw/diabetic_data.csv
 ```
 
 Do not rename the file.
@@ -179,7 +179,7 @@ Training will:
 Saved outputs:
 
 ```text
-models/careguard_readmission_model.joblib
+models/caresync_readmission_model.joblib
 models/threshold.json
 reports/metrics.json
 reports/figures/confusion_matrix.png
@@ -302,7 +302,7 @@ Accuracy is not the main optimization target because hospital readmission is an 
 
 Most binary classifiers use `0.50` as the default decision threshold. In this project, that may miss too many high-risk patients.
 
-CareGuard AI evaluates thresholds from `0.10` to `0.90` and selects a recall-focused threshold that reduces false negatives while keeping precision reasonable.
+CareSync AI evaluates thresholds from `0.10` to `0.90` and selects a recall-focused threshold that reduces false negatives while keeping precision reasonable.
 
 Clinical logic:
 
@@ -372,4 +372,4 @@ Before using prediction endpoints in Docker, train the model locally or mount tr
 
 ## Clinical Disclaimer
 
-CareGuard AI is a hackathon and educational project. It is not intended to diagnose, treat, cure, or prevent any disease. Predictions must be reviewed by qualified healthcare professionals before any clinical action is taken.
+CareSync AI is a hackathon and educational project. It is not intended to diagnose, treat, cure, or prevent any disease. Predictions must be reviewed by qualified healthcare professionals before any clinical action is taken.

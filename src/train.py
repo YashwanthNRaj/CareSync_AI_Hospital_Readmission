@@ -108,7 +108,7 @@ def maybe_start_mlflow() -> None:
     tracking_dir = PROJECT_ROOT / "mlruns"
     tracking_dir.mkdir(exist_ok=True)
     mlflow.set_tracking_uri(tracking_dir.as_uri())
-    mlflow.set_experiment("CareGuard AI Hospital Readmission")
+    mlflow.set_experiment("CareSync AI Hospital Readmission")
 
 
 def log_run_to_mlflow(model_name: str, pipeline, metrics: Dict, model_params: Dict) -> None:

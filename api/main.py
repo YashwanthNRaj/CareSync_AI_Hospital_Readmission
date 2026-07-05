@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, List
@@ -8,15 +9,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Security
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import APIKeyHeader
 
 from api.schemas import BatchPredictionRequest, PatientInput, PredictionResponse
 from src.config import MODEL_PATH, THRESHOLD_PATH
 from src.predict import CLINICAL_DISCLAIMER, predict_readmission
 
 app = FastAPI(
-    title="CareGuard AI: Hospital Readmission Risk Scorer",
+    title="CareSync AI: Hospital Readmission Risk Scorer",
     description="Recall-focused diabetic patient 30-day readmission risk scoring API.",
     version="1.0.0",
 )
@@ -29,11 +31,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+API_KEY_NAME = "X-API-Key"
+API_KEY = os.getenv("API_KEY", "caresync-secure-key-2026")
+api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=True)
+
+def get_api_key(api_key: str = Security(api_key_header)) -> str:
+    if api_key != API_KEY:
+        raise HTTPException(status_code=403, detail="Could not validate API key")
+    return api_key
+
 
 @app.get("/")
 def root() -> Dict[str, Any]:
     return {
-        "message": "CareGuard AI Hospital Readmission Risk Scorer API",
+        "message": "CareSync AI Hospital Readmission Risk Scorer API",
         "docs": "/docs",
         "clinical_disclaimer": CLINICAL_DISCLAIMER,
     }
@@ -49,7 +60,7 @@ def health() -> Dict[str, Any]:
 
 
 @app.post("/predict", response_model=PredictionResponse)
-def predict(patient: PatientInput) -> Dict[str, Any]:
+def predict(patient: PatientInput, api_key: str = Depends(get_api_key)) -> Dict[str, Any]:
     try:
         patient_dict = patient.to_feature_dict()
         if not patient_dict:
@@ -64,7 +75,7 @@ def predict(patient: PatientInput) -> Dict[str, Any]:
 
 
 @app.post("/predict_batch")
-def predict_batch(request: BatchPredictionRequest) -> Dict[str, Any]:
+def predict_batch(request: BatchPredictionRequest, api_key: str = Depends(get_api_key)) -> Dict[str, Any]:
     if not request.patients:
         raise HTTPException(status_code=400, detail="patients list cannot be empty.")
 

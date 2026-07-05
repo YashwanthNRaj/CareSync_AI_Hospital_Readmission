@@ -1,8 +1,8 @@
-# Model Card: CareGuard AI Hospital Readmission Risk Scorer
+# Model Card: CareSync AI Hospital Readmission Risk Scorer
 
 ## Model Name
 
-CareGuard AI Hospital Readmission Risk Scorer
+CareSync AI Hospital Readmission Risk Scorer
 
 ## Intended Use
 

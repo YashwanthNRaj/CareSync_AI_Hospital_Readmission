@@ -1,1 +1,1 @@
-"""CareGuard AI source package."""
+"""CareSync AI source package."""
