@@ -22,14 +22,22 @@ CLINICAL_DISCLAIMER = (
 )
 
 
-def load_model(path: Path = MODEL_PATH):
+def load_model(path: Path | None = None):
     """Load the trained model artifact."""
-    if not path.exists():
-        raise FileNotFoundError(
-            f"Trained model was not found at {path}. Run `python src/train.py` before prediction."
-        )
-    return joblib.load(path)
+    candidates = [
+        path or MODEL_PATH,
+        PROJECT_ROOT / "models" / "careguard_readmission_model.joblib",
+        PROJECT_ROOT / "models" / "caresync_readmission_model.joblib",
+    ]
 
+    for candidate in candidates:
+        if candidate.exists():
+            return joblib.load(candidate)
+
+    raise FileNotFoundError(
+        "Trained model was not found. Checked: "
+        + ", ".join(str(candidate) for candidate in candidates)
+    )
 
 def load_threshold(path: Path = THRESHOLD_PATH) -> float:
     """Load the tuned threshold. If missing, fall back to 0.50."""
