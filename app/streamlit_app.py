@@ -22,7 +22,7 @@ from src.config import FIGURES_DIR, METRICS_PATH
 from src.predict import CLINICAL_DISCLAIMER, predict_readmission
 
 SAMPLE_PATH = PROJECT_ROOT / "data" / "sample" / "sample_patient.json"
-MODEL_PATH = PROJECT_ROOT / "models" / "caresync_readmission_model.joblib"
+MODEL_PATH = PROJECT_ROOT / "models" / "careguard_readmission_model.joblib"
 THRESHOLD_PATH = PROJECT_ROOT / "models" / "threshold.json"
 MLRUNS_DIR = PROJECT_ROOT / "mlruns"
 PREDICTION_LOG_PATH = PROJECT_ROOT / "reports" / "prediction_logs.csv"
