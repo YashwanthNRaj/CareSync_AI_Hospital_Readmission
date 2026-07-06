@@ -3715,6 +3715,10 @@ def main() -> None:
 
 
                 except FileNotFoundError:
+                    st.write("DEBUG PROJECT_ROOT:", PROJECT_ROOT)
+                    st.write("DEBUG MODEL_PATH:", MODEL_PATH)
+                    st.write("DEBUG MODEL EXISTS:", MODEL_PATH.exists())
+                    st.write("DEBUG MODELS FOLDER:", list((PROJECT_ROOT / "models").glob("*")))
                     st.error("Model not found. First run `python src/train.py` from the project root.")
                 except Exception as exc:
                     st.error(f"Prediction failed: {exc}")
