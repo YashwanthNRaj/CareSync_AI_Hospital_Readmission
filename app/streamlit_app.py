@@ -1751,31 +1751,44 @@ def inject_css() -> None:
             caret-color: var(--accent) !important;
         }
 
+        /* Streamlit 1.50+ uses React Aria wrappers instead of BaseWeb inputs. */
+        [data-testid="stTextInputRootElement"],
+        [data-testid="stNumberInputContainer"],
         [data-testid="stTextInput"] div[data-baseweb="input"],
         [data-testid="stNumberInput"] div[data-baseweb="input"],
         [data-testid="stTextInput"] div[data-baseweb="base-input"],
         [data-testid="stNumberInput"] div[data-baseweb="base-input"] {
             background-color: #ffffff !important;
-            border: 1px solid var(--border) !important;
+            border: 1.5px solid #b79eab !important;
             border-radius: 8px !important;
+            box-shadow: 0 1px 2px rgba(45, 8, 30, 0.06) !important;
             color: var(--text) !important;
-        }
-        
-        [data-testid="stTextInput"] div[data-baseweb="base-input"]:focus-within,
-        [data-testid="stNumberInput"] div[data-baseweb="base-input"]:focus-within {
-            border-color: var(--accent) !important;
-            box-shadow: 0 0 0 1px var(--primary-border) !important;
         }
 
+        [data-testid="stTextInputRootElement"]:hover,
+        [data-testid="stNumberInputContainer"]:hover,
+        [data-testid="stTextInput"] div[data-baseweb="base-input"]:focus-within,
+        [data-testid="stNumberInput"] div[data-baseweb="base-input"]:focus-within,
+        [data-testid="stTextInputRootElement"]:focus-within,
+        [data-testid="stNumberInputContainer"]:focus-within {
+            border-color: var(--accent) !important;
+            box-shadow: 0 0 0 3px rgba(45, 8, 30, 0.15) !important;
+        }
+
+        [data-testid="stSelectbox"] [role="group"],
         [data-testid="stSelectbox"] div[data-baseweb="select"] > div {
             background-color: #ffffff !important;
-            border: 1px solid var(--border) !important;
+            border: 1.5px solid #b79eab !important;
             border-radius: 8px !important;
+            box-shadow: 0 1px 2px rgba(45, 8, 30, 0.06) !important;
             color: var(--text) !important;
         }
-        
+
+        [data-testid="stSelectbox"] [role="group"]:hover,
+        [data-testid="stSelectbox"] [role="group"]:focus-within,
         [data-testid="stSelectbox"] div[data-baseweb="select"] > div:hover {
-            border-color: var(--border) !important;
+            border-color: var(--accent) !important;
+            box-shadow: 0 0 0 3px rgba(45, 8, 30, 0.15) !important;
         }
 
         [data-testid="stSelectbox"] div[data-baseweb="select"] span {
@@ -3456,7 +3469,12 @@ def main() -> None:
 
 
         with st.form("patient_form"):
-            tab1, tab2, tab3, tab4 = st.tabs(["Patient", "Admission", "Clinical", "Diabetes Care"])
+            tab1, tab2, tab3, tab4 = st.tabs([
+                ":material/person: Patient",
+                ":material/local_hospital: Admission",
+                ":material/medical_services: Clinical",
+                ":material/monitor_heart: Diabetes Care"
+            ])
 
             with tab1:
                 patient_name = st.text_input("Patient Name", value=str(active_sample.get("patient_name", "Demo Patient")))
@@ -3767,4 +3785,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
